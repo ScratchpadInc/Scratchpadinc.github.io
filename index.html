@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GlacierSearch AWS Cost Model</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            color: #1a1a2e;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .section {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .section h2 {
+            margin-top: 0;
+            color: #1a1a2e;
+            font-size: 18px;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 10px;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 20px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .control-group label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #444;
+            font-size: 14px;
+        }
+        .control-group input, .control-group select {
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .control-group input:focus, .control-group select:focus {
+            outline: none;
+            border-color: #4a90d9;
+            box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+        }
+        .control-group .hint {
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
+        }
+        .chart-container {
+            height: 400px;
+        }
+        .breakdown-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        .breakdown-table th, .breakdown-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .breakdown-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #444;
+        }
+        .breakdown-table tr:hover {
+            background: #f8f9fa;
+        }
+        .breakdown-table .section-header {
+            background: #e5e7eb;
+            font-weight: 600;
+        }
+        .breakdown-table .subtotal {
+            font-weight: 600;
+            background: #f0fdf4;
+        }
+        .breakdown-table .grand-total {
+            font-weight: 700;
+            background: #d1fae5;
+            font-size: 16px;
+        }
+        .breakdown-table .calculation {
+            color: #666;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .assumptions {
+            background: #fffbeb;
+            border-radius: 8px;
+            padding: 20px;
+            font-size: 14px;
+        }
+        .assumptions h3 {
+            margin-top: 0;
+            color: #92400e;
+        }
+        .assumptions ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .assumptions li {
+            margin-bottom: 5px;
+        }
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 900px) {
+            .two-col {
+                grid-template-columns: 1fr;
+            }
+        }
+        .storage-toggle {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .storage-toggle label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: normal;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .storage-toggle label:hover {
+            border-color: #3b82f6;
+        }
+        .storage-toggle input:checked + span {
+            color: #3b82f6;
+        }
+        .storage-toggle label:has(input:checked) {
+            border-color: #3b82f6;
+            background: #eff6ff;
+        }
+        .storage-toggle input {
+            accent-color: #3b82f6;
+        }
+    </style>
+</head>
+<body>
+    <h1>GlacierSearch AWS Cost Model</h1>
+    <p class="subtitle">Detailed cost breakdown for Glaciersearch infrastructure over 24 months</p>
+
+    <!-- Input Parameters -->
+    <div class="section">
+        <h2>Configuration Parameters</h2>
+        <div class="controls">
+            <div class="control-group">
+                <label for="tbPerMonth">TB Ingested / Month</label>
+                <input type="number" id="tbPerMonth" value="10" min="0.1" step="1">
+                <span class="hint">Raw log data before compression</span>
+            </div>
+            <div class="control-group">
+                <label for="numSources">Number of Sources</label>
+                <input type="number" id="numSources" value="1000" min="1" step="100">
+                <span class="hint">Distinct log sources (apps/services)</span>
+            </div>
+            <div class="control-group">
+                <label for="collectorThresholdMB">Collector Threshold (MB)</label>
+                <input type="number" id="collectorThresholdMB" value="128" min="64" max="512" step="32">
+                <span class="hint">Raw data size before collection (64-512 MB)</span>
+            </div>
+            <div class="control-group">
+                <label for="batchInterval">Collector Interval</label>
+                <select id="batchInterval">
+                    <option value="1440">Daily (24hr)</option>
+                    <option value="720">Twice daily (12hr)</option>
+                    <option value="360">4x daily (6hr)</option>
+                    <option value="60">Hourly</option>
+                </select>
+                <span class="hint">Max time before collection</span>
+            </div>
+            <div class="control-group">
+                <label for="searchesPerDay">Searches / Day</label>
+                <input type="number" id="searchesPerDay" value="100" min="0" step="1">
+                <span class="hint">Average daily search queries</span>
+            </div>
+            <div class="control-group">
+                <label for="compressionRatio">Compression Ratio</label>
+                <input type="number" id="compressionRatio" value="10" min="1" max="20" step="0.5">
+                <span class="hint">Raw:Compressed (10x = 10% of raw)</span>
+            </div>
+            <div class="control-group">
+                <label for="partitionsPerSearch">Max Partitions / Search</label>
+                <input type="number" id="partitionsPerSearch" value="30000" min="1" max="100000" step="1000">
+                <span class="hint">days × sources limit (e.g., 30 days × 1000 sources)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Storage Class Selection -->
+    <div class="section">
+        <h2>Storage Classes to Compare</h2>
+        <div class="storage-toggle">
+            <label>
+                <input type="checkbox" id="toggleS3Standard" value="s3Standard">
+                <span>S3 Standard ($0.023/GB)</span>
+            </label>
+            <label>
+                <input type="checkbox" id="toggleS3IA" value="s3IA">
+                <span>S3 Standard-IA ($0.0125/GB)</span>
+            </label>
+            <label>
+                <input type="checkbox" id="toggleGlacierIR" value="glacierIR" checked>
+                <span>Glacier Instant ($0.004/GB)</span>
+            </label>
+            <label>
+                <input type="checkbox" id="toggleGlacierDA" value="glacierDA">
+                <span>Glacier Deep Archive ($0.00099/GB)</span>
+            </label>
+        </div>
+        <p class="hint" style="margin-top: 10px;">Glacier IR recommended for instant search. Deep Archive requires 12-48hr retrieval.</p>
+    </div>
+
+    <!-- Chart -->
+    <div class="section">
+        <h2>Monthly Cost Over 24 Months</h2>
+        <div class="chart-container">
+            <canvas id="costChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Two Column Layout -->
+    <div class="two-col">
+        <!-- Cost Breakdown Table -->
+        <div class="section">
+            <h2>Month 24 Cost Breakdown</h2>
+            <table class="breakdown-table" id="breakdownTable"></table>
+        </div>
+
+        <!-- Assumptions -->
+        <div class="section assumptions">
+            <h3>Model Assumptions</h3>
+            <ul>
+                <li><strong>Two-stage ingestion:</strong> Firehose (128MB/15min) → S3 Raw → Collector Lambda (threshold/interval) → S3 Cold.</li>
+                <li><strong>Firehose:</strong> 1 stream per source. $0.029/GB ingested. Buffers at 128MB or 15 min.</li>
+                <li><strong>Collector Lambda:</strong> 1GB memory, ~30s runtime. Aggregates raw files, writes partition manifest to S3.</li>
+                <li><strong>Scheduler Lambda:</strong> Runs every 15 min, checks source paths via S3 ListObjects to trigger collection.</li>
+                <li><strong>Raw landing zone:</strong> S3 Standard. Data retained until collection (typically &lt;24hr).</li>
+                <li><strong>Pareto distribution:</strong> Top 20% of sources generate 80% of data. Heavy sources trigger on size; light sources on time.</li>
+                <li><strong>Search architecture:</strong> Coordinator (128MB, 2s) fetches rollup blooms → prunes days → fans out to per-source Workers (256MB).</li>
+                <li><strong>Hierarchical bloom filters:</strong> Monthly rollups → daily rollups → partition blooms. ~50% of days pruned by rollup blooms on average.</li>
+                <li><strong>Workers fetch manifests:</strong> Each worker fetches ~750KB manifests for its source from S3, evaluates partition blooms.</li>
+                <li><strong>Metadata:</strong> ~1% of compressed storage in S3 Standard (partition manifests with bloom filters, zone maps, file lists + rollup blooms).</li>
+                <li><strong>RDS:</strong> db.t4g.micro ($11.68/mo) + 20GB storage. Stores open partitions, source schemas, billing only.</li>
+                <li><strong>Max partitions per search:</strong> days × sources limit. E.g., 30,000 = 30 days × 1000 sources (worst case cross-source query).</li>
+                <li><strong>Bloom filter FPR:</strong> 1% false positive rate. 99% of workers finish after manifest evaluation; 1% scan data files.</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- AWS Pricing Reference -->
+    <div class="section">
+        <h2>AWS Pricing Reference (US East)</h2>
+        <table class="breakdown-table">
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>Component</th>
+                    <th>Price</th>
+                    <th>Unit</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>Kinesis Firehose</td><td>Data ingestion</td><td>$0.029</td><td>per GB</td></tr>
+                <tr><td>Lambda</td><td>Invocations</td><td>$0.20</td><td>per million</td></tr>
+                <tr><td>Lambda</td><td>Compute</td><td>$0.0000166667</td><td>per GB-second</td></tr>
+                <tr><td>S3 Standard</td><td>Storage</td><td>$0.023</td><td>per GB/month</td></tr>
+                <tr><td>S3 Standard-IA</td><td>Storage</td><td>$0.0125</td><td>per GB/month</td></tr>
+                <tr><td>S3 Standard-IA</td><td>Retrieval</td><td>$0.01</td><td>per GB</td></tr>
+                <tr><td>Glacier Instant</td><td>Storage</td><td>$0.004</td><td>per GB/month</td></tr>
+                <tr><td>Glacier Instant</td><td>Retrieval</td><td>$0.03</td><td>per GB</td></tr>
+                <tr><td>Glacier Deep Archive</td><td>Storage</td><td>$0.00099</td><td>per GB/month</td></tr>
+                <tr><td>Glacier Deep Archive</td><td>Retrieval</td><td>$0.02</td><td>per GB</td></tr>
+                <tr><td>RDS (t4g.micro)</td><td>Instance</td><td>$0.016</td><td>per hour</td></tr>
+                <tr><td>RDS</td><td>Storage (gp3)</td><td>$0.115</td><td>per GB/month</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // AWS Pricing Constants (US East)
+        const PRICING = {
+            firehose: {
+                perGB: 0.029  // $0.029 per GB ingested
+            },
+            lambda: {
+                invocationPerMillion: 0.20,
+                gbSecond: 0.0000166667
+            },
+            s3Standard: {
+                storagePerGB: 0.023,
+                putPer1k: 0.005,
+                getPer1k: 0.0004,
+                retrievalPerGB: 0
+            },
+            s3IA: {
+                storagePerGB: 0.0125,
+                putPer1k: 0.01,
+                getPer1k: 0.001,
+                retrievalPerGB: 0.01
+            },
+            glacierIR: {
+                storagePerGB: 0.004,
+                putPer1k: 0.02,
+                getPer1k: 0.01,
+                retrievalPerGB: 0.03
+            },
+            glacierDA: {
+                storagePerGB: 0.00099,
+                putPer1k: 0.05,
+                getPer1k: 0.0004,
+                retrievalPerGB: 0.02
+            },
+            rds: {
+                microHourly: 0.016,
+                storagePerGB: 0.115,
+                backupPerGB: 0.095
+            }
+        };
+
+        // Glaciersearch fee
+        const GS_FEE_PER_GB = 0.03;
+
+        let chart;
+
+        function getInputs() {
+            return {
+                tbPerMonth: parseFloat(document.getElementById('tbPerMonth').value) || 10,
+                numSources: parseInt(document.getElementById('numSources').value) || 1000,
+                collectorThresholdMB: parseInt(document.getElementById('collectorThresholdMB').value) || 128,
+                batchInterval: parseInt(document.getElementById('batchInterval').value) || 1440,
+                searchesPerDay: parseInt(document.getElementById('searchesPerDay').value) || 100,
+                compressionRatio: parseFloat(document.getElementById('compressionRatio').value) || 10,
+                // Search scope
+                partitionsPerSearch: parseInt(document.getElementById('partitionsPerSearch').value) || 100,
+                storageTiers: getSelectedStorageTiers()
+            };
+        }
+
+        // Calculate files per partition based on batch interval and Pareto distribution
+        // Partition = source + time bucket (e.g., day)
+        // Max file size: 10MB compressed (100MB raw at 10x compression)
+        // Files are created when: size threshold (100MB raw) OR age threshold (batch interval) is reached
+        function calculateFilesPerPartition(inputs) {
+            const { tbPerMonth, numSources, compressionRatio, batchInterval } = inputs;
+
+            const gbPerMonth = tbPerMonth * 1024;
+            const maxRawFileSizeMB = 100; // Trigger at 100MB raw
+
+            // Pareto distribution: top 20% sources = 80% of data
+            const heavySourceCount = Math.floor(numSources * 0.2);
+            const lightSourceCount = numSources - heavySourceCount;
+
+            // Data per source type per day
+            const totalGBPerDay = gbPerMonth / 30;
+            const heavySourceGBPerDay = (totalGBPerDay * 0.8) / heavySourceCount; // Per heavy source
+            const lightSourceGBPerDay = (totalGBPerDay * 0.2) / lightSourceCount; // Per light source
+
+            // Files per day per source type (based on size threshold)
+            const heavyFilesPerDay = Math.max(1, Math.ceil((heavySourceGBPerDay * 1024) / maxRawFileSizeMB));
+            const lightFilesPerDay = Math.max(1, Math.ceil((lightSourceGBPerDay * 1024) / maxRawFileSizeMB));
+
+            // If batch interval forces more frequent batching, that increases files
+            const batchesPerDay = 1440 / batchInterval;
+            const heavyFilesWithBatching = Math.max(heavyFilesPerDay, batchesPerDay);
+            const lightFilesWithBatching = Math.max(lightFilesPerDay, batchesPerDay);
+
+            // Weighted average across all sources
+            const avgFilesPerPartition = (heavySourceCount * heavyFilesWithBatching +
+                                          lightSourceCount * lightFilesWithBatching) / numSources;
+
+            return {
+                avgFilesPerPartition: Math.ceil(avgFilesPerPartition),
+                heavyFilesPerDay: Math.ceil(heavyFilesWithBatching),
+                lightFilesPerDay: Math.ceil(lightFilesWithBatching),
+                heavySourceGBPerDay,
+                lightSourceGBPerDay
+            };
+        }
+
+        function getSelectedStorageTiers() {
+            const tiers = [];
+            if (document.getElementById('toggleS3Standard').checked) tiers.push('s3Standard');
+            if (document.getElementById('toggleS3IA').checked) tiers.push('s3IA');
+            if (document.getElementById('toggleGlacierIR').checked) tiers.push('glacierIR');
+            if (document.getElementById('toggleGlacierDA').checked) tiers.push('glacierDA');
+            return tiers.length > 0 ? tiers : ['glacierIR'];
+        }
+
+        function calculateCosts(inputs, storageTier, month, filesPerPartitionData) {
+            const { tbPerMonth, numSources, collectorThresholdMB, batchInterval, searchesPerDay, compressionRatio,
+                    partitionsPerSearch } = inputs;
+            const filesPerPartition = filesPerPartitionData.avgFilesPerPartition;
+
+            const gbPerMonth = tbPerMonth * 1024;
+            const compressedGBPerMonth = gbPerMonth / compressionRatio;
+
+            // Cumulative storage at this month (raw, not compressed - for $/GB calculation)
+            const cumulativeRawGB = gbPerMonth * month;
+            const cumulativeCompressedTB = (compressedGBPerMonth * month) / 1024;
+            const cumulativeCompressedGB = compressedGBPerMonth * month;
+
+            const storagePricing = PRICING[storageTier];
+            const costs = {};
+
+            // === Kinesis Firehose ===
+            // Per-GB pricing: $0.029/GB ingested
+            costs.firehose = gbPerMonth * PRICING.firehose.perGB;
+
+            // === Two-Stage Ingestion ===
+            // Stage 1: Firehose flushes at 128MB or 15min (whichever first)
+            // Stage 2: Collector Lambda aggregates raw files until collectorThresholdMB or batchInterval
+
+            const firehoseBufferMB = 128; // Max Firehose buffer
+            const firehoseIntervalMin = 15; // Firehose time buffer
+
+            // Pareto distribution: 20% sources = 80% data
+            const heavySourceCount = Math.floor(numSources * 0.2);
+            const lightSourceCount = numSources - heavySourceCount;
+            const rawGBPerDay = gbPerMonth / 30;
+            const heavySourceGBPerDay = (rawGBPerDay * 0.8) / heavySourceCount;
+            const lightSourceGBPerDay = (rawGBPerDay * 0.2) / lightSourceCount;
+
+            // Heavy sources: triggered by size threshold
+            // How many times per day does a heavy source hit collectorThresholdMB?
+            const heavyCollectionsPerDay = Math.max(1, (heavySourceGBPerDay * 1024) / collectorThresholdMB);
+
+            // Light sources: triggered by time threshold (once per batch interval)
+            const batchesPerDay = 1440 / batchInterval;
+            const lightCollectionsPerDay = batchesPerDay; // Time-triggered
+
+            // Total collector invocations per month
+            const collectorInvocationsPerMonth = 30 * (
+                heavySourceCount * heavyCollectionsPerDay +
+                lightSourceCount * lightCollectionsPerDay
+            );
+
+            const collectorMemoryGB = 1;
+            const collectorRuntimeSec = 30;
+            costs.collectorLambdaInvoke = (collectorInvocationsPerMonth / 1_000_000) * PRICING.lambda.invocationPerMillion;
+            costs.collectorLambdaCompute = collectorInvocationsPerMonth * collectorRuntimeSec * collectorMemoryGB * PRICING.lambda.gbSecond;
+            costs.collectorLambda = costs.collectorLambdaInvoke + costs.collectorLambdaCompute;
+
+            // Scheduler Lambda: runs every 15 min, checks all sources
+            const schedulerInvocationsPerMonth = 4 * 24 * 30; // 4/hr * 24hr * 30days
+            const schedulerMemoryGB = 0.256;
+            const schedulerRuntimeSec = 5; // Quick ListObjects per source
+            costs.schedulerLambda = schedulerInvocationsPerMonth * schedulerRuntimeSec * schedulerMemoryGB * PRICING.lambda.gbSecond;
+
+            // S3 ListObjects for scheduler (~$0.005/1000 requests)
+            // Each scheduler run lists objects for active sources (simplified: all sources)
+            const listRequestsPerMonth = schedulerInvocationsPerMonth * numSources;
+            costs.schedulerS3List = (listRequestsPerMonth / 1000) * 0.005;
+
+            costs.ingestionLambda = costs.collectorLambda + costs.schedulerLambda + costs.schedulerS3List;
+
+            // === S3 Storage ===
+
+            // S3 Raw landing zone (temporary storage before collection)
+            // Average raw data in flight: ~1 day's worth at any time (collected within batchInterval)
+            // With daily batching, ~1 day of data; with hourly, ~1 hour
+            const avgRawRetentionDays = batchInterval / 1440; // fraction of a day
+            const rawStorageGB = rawGBPerDay * Math.max(avgRawRetentionDays, 0.5); // At least 12hr buffer
+            costs.rawStorage = rawStorageGB * PRICING.s3Standard.storagePerGB;
+
+            // Cold storage (compressed data)
+            costs.coldStorage = cumulativeCompressedGB * storagePricing.storagePerGB;
+
+            // Metadata storage in S3 Standard:
+            // - Partition manifests: ~750KB each = ~1% of compressed data
+            // - Monthly rollup blooms: ~1MB per source per month
+            // - Daily rollup indexes: ~2KB per day (negligible)
+            const partitionManifestsGB = cumulativeCompressedGB * 0.01;
+            const monthlyRollupGB = (month * numSources * 1) / 1024; // 1MB per source per month
+            const metadataGB = partitionManifestsGB + monthlyRollupGB;
+            costs.metadataStorage = metadataGB * PRICING.s3Standard.storagePerGB;
+
+            // PUT requests (files written this month)
+            // Collector writes compressed files: total data / (threshold * compression ratio)
+            const filesPerMonth = collectorInvocationsPerMonth; // 1 file per collection
+            costs.s3Put = (filesPerMonth / 1000) * storagePricing.putPer1k;
+
+            // === Search Lambda (Coordinator + Per-Source Workers) ===
+            const searchesPerMonth = searchesPerDay * 30;
+
+            // Search scope: partitionsPerSearch = days × sources limit
+            // E.g., 30,000 = 30 days × 1000 sources (worst case cross-source query)
+            // Rollup blooms prune ~50% of days on average before we fetch manifests
+            const rollupPruneRatio = 0.5;
+            const effectivePartitions = partitionsPerSearch * (1 - rollupPruneRatio);
+
+            // Workers = unique sources touched (not partitions)
+            // If partitionsPerSearch = 30 days × 1000 sources, workers = 1000 (one per source)
+            // If partitionsPerSearch = 7 days × 1 source, workers = 1
+            // Approximate: sqrt(partitions) for mixed queries, capped at numSources
+            const avgWorkersPerSearch = Math.min(
+                Math.ceil(Math.sqrt(effectivePartitions)),
+                numSources
+            );
+            const workerInvocations = searchesPerMonth * avgWorkersPerSearch;
+
+            // Manifest fetches: each worker fetches manifests for its source
+            // Days per worker = effectivePartitions / workers
+            const daysPerWorker = Math.ceil(effectivePartitions / avgWorkersPerSearch);
+            const manifestGetsPerSearch = avgWorkersPerSearch * daysPerWorker;
+            const totalManifestGets = searchesPerMonth * manifestGetsPerSearch;
+
+            // Coordinator Lambda: fetches rollup blooms, prunes days, invokes workers
+            const coordinatorMemoryGB = 0.128;
+            const coordinatorRuntimeSec = 2;
+            costs.coordinatorLambda = (searchesPerMonth / 1_000_000) * PRICING.lambda.invocationPerMillion +
+                                       searchesPerMonth * coordinatorRuntimeSec * coordinatorMemoryGB * PRICING.lambda.gbSecond;
+
+            // Worker Lambda: fetches manifests, evaluates partition blooms
+            // 99% finish after bloom evaluation (~1s), 1% scan data files (~5s)
+            const workerMemoryGB = 0.256;
+            const fastWorkers = workerInvocations * 0.99;
+            const slowWorkers = workerInvocations * 0.01;
+            costs.workerLambdaInvoke = (workerInvocations / 1_000_000) * PRICING.lambda.invocationPerMillion;
+            costs.workerLambdaCompute = (fastWorkers * 1 * workerMemoryGB + slowWorkers * 5 * workerMemoryGB) * PRICING.lambda.gbSecond;
+            costs.searchLambda = costs.coordinatorLambda + costs.workerLambdaInvoke + costs.workerLambdaCompute;
+
+            // S3 GET requests for search
+            // Manifest GETs from S3 Standard are ~free ($0.0004/1K), so we ignore them
+            // Only data retrieval from cold storage matters
+            const retrievedGB = (slowWorkers * 100) / 1024; // 100MB per worker that scans (1% of workers)
+            costs.s3Retrieval = retrievedGB * storagePricing.retrievalPerGB;
+
+            // === Search Results Storage (S3 Standard, 30-day TTL) ===
+            // Results vary by query type:
+            // - Needle queries: ~1MB results (single record + context)
+            // - Broad queries: ~100MB results (many matching records)
+            // Weighted average: ~10MB per search
+            const avgResultSizeMB = 10;
+            const resultsGBPerDay = (searchesPerDay * avgResultSizeMB) / 1024;
+            // Results accumulate up to 30 days, then TTL expires (steady state)
+            const resultsRetentionDays = 30;
+            const resultsStorageGB = resultsGBPerDay * resultsRetentionDays;
+            costs.searchResultsStorage = resultsStorageGB * PRICING.s3Standard.storagePerGB;
+            // PUT requests for writing results
+            costs.searchResultsPut = (searchesPerMonth / 1000) * PRICING.s3Standard.putPer1k;
+
+            // === RDS ===
+            costs.rdsInstance = PRICING.rds.microHourly * 730; // hours/month
+            costs.rdsStorage = 20 * PRICING.rds.storagePerGB;
+            costs.rdsBackup = 20 * PRICING.rds.backupPerGB;
+            costs.rds = costs.rdsInstance + costs.rdsStorage + costs.rdsBackup;
+
+            // === Other ===
+            costs.cloudwatch = 2; // ~20 alarms
+            costs.dataTransfer = 10 * 0.09; // 10GB out
+
+            // === Totals ===
+            costs.lambdaTotal = costs.ingestionLambda + costs.searchLambda;
+            costs.s3ColdTotal = costs.coldStorage + costs.s3Put + costs.s3Retrieval; // Varies by tier
+            costs.s3MetadataTotal = costs.metadataStorage; // Always S3 Standard
+            costs.s3HotTotal = costs.rawStorage + costs.searchResultsStorage + costs.searchResultsPut;
+            costs.s3Total = costs.s3ColdTotal + costs.s3MetadataTotal + costs.s3HotTotal;
+            costs.otherTotal = costs.cloudwatch + costs.dataTransfer;
+
+            costs.awsTotal = costs.firehose + costs.lambdaTotal + costs.s3Total + costs.rds + costs.otherTotal;
+
+            // Glaciersearch fee
+            costs.gsFee = gbPerMonth * GS_FEE_PER_GB;
+
+            costs.grandTotal = costs.awsTotal + costs.gsFee;
+
+            // Calculate $/GB stored (based on raw/uncompressed cumulative storage)
+            costs.perGBStored = cumulativeRawGB > 0 ? costs.grandTotal / cumulativeRawGB : 0;
+
+            // Store intermediate values for breakdown
+            costs._meta = {
+                cumulativeCompressedTB,
+                cumulativeRawGB,
+                collectorInvocationsPerMonth,
+                heavyCollectionsPerDay,
+                lightCollectionsPerDay,
+                rawStorageGB,
+                searchesPerMonth,
+                workerInvocations,
+                avgWorkersPerSearch,
+                filesPerPartition,
+                filesPerMonth,
+                metadataGB,
+                partitionManifestsGB,
+                monthlyRollupGB,
+                daysPerWorker,
+                retrievedGB,
+                resultsStorageGB,
+                avgResultSizeMB,
+                storagePricing
+            };
+
+            return costs;
+        }
+
+        function updateAll() {
+            const inputs = getInputs();
+            const months = 24;
+
+            // Calculate files per partition based on batch interval and Pareto distribution
+            const filesPerPartitionData = calculateFilesPerPartition(inputs);
+
+
+            // Calculate costs for each selected storage tier
+            const allResults = {};
+            for (const tier of inputs.storageTiers) {
+                allResults[tier] = {
+                    monthlyCosts: [],
+                    perGBCosts: [],
+                    totalCost: 0,
+                    breakdown: null
+                };
+
+                for (let month = 1; month <= months; month++) {
+                    const costs = calculateCosts(inputs, tier, month, filesPerPartitionData);
+                    allResults[tier].monthlyCosts.push(costs.grandTotal);
+                    allResults[tier].perGBCosts.push(costs.perGBStored);
+                    if (month === months) {
+                        allResults[tier].breakdown = costs;
+                    }
+                }
+                allResults[tier].totalCost = allResults[tier].monthlyCosts.reduce((a, b) => a + b, 0);
+            }
+
+            updateChart(allResults);
+            updateBreakdown(inputs, allResults, filesPerPartitionData);
+        }
+
+        function updateChart(allResults) {
+            const tierColors = {
+                s3Standard: { border: '#ff6384', bg: '#ff638420', perGB: '#ff6384' },
+                s3IA: { border: '#f59e0b', bg: '#f59e0b20' },
+                glacierIR: { border: '#36a2eb', bg: '#36a2eb20' },
+                glacierDA: { border: '#4bc0c0', bg: '#4bc0c020' }
+            };
+            const tierNames = {
+                s3Standard: 'S3 Standard',
+                s3IA: 'S3 Standard-IA',
+                glacierIR: 'Glacier Instant Retrieval',
+                glacierDA: 'Glacier Deep Archive'
+            };
+
+            const labels = Array.from({ length: 24 }, (_, i) => `Month ${i + 1}`);
+
+            // Create datasets for both monthly cost and $/GB
+            const datasets = [];
+
+            Object.entries(allResults).forEach(([tier, data]) => {
+                // Monthly cost (left axis)
+                datasets.push({
+                    label: `${tierNames[tier]} - Monthly Cost`,
+                    data: data.monthlyCosts,
+                    borderColor: tierColors[tier].border,
+                    backgroundColor: tierColors[tier].bg,
+                    tension: 0.1,
+                    fill: false,
+                    yAxisID: 'y',
+                    borderWidth: 2
+                });
+
+                // $/GB stored (right axis) - for each tier with dashed line
+                datasets.push({
+                    label: `${tierNames[tier]} - $/GB`,
+                    data: data.perGBCosts,
+                    borderColor: tierColors[tier].border,
+                    backgroundColor: tierColors[tier].bg,
+                    tension: 0.1,
+                    fill: false,
+                    yAxisID: 'y1',
+                    borderWidth: 2,
+                    borderDash: [5, 5]
+                });
+            });
+
+            if (chart) {
+                chart.data.labels = labels;
+                chart.data.datasets = datasets;
+                chart.update();
+            } else {
+                const ctx = document.getElementById('costChart').getContext('2d');
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        plugins: {
+                            title: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        if (context.dataset.yAxisID === 'y1') {
+                                            return `${context.dataset.label}: $${context.parsed.y.toFixed(4)}/GB`;
+                                        }
+                                        return `${context.dataset.label}: $${context.parsed.y.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+                                    }
+                                }
+                            },
+                            legend: {
+                                labels: {
+                                    usePointStyle: true,
+                                    padding: 20
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Monthly Cost ($)',
+                                    color: '#36a2eb'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toLocaleString();
+                                    },
+                                    color: '#36a2eb'
+                                },
+                                grid: {
+                                    drawOnChartArea: true
+                                }
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: '$/GB Stored (decreasing)',
+                                    color: '#10b981'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toFixed(3);
+                                    },
+                                    color: '#10b981'
+                                },
+                                grid: {
+                                    drawOnChartArea: false
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Month'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        function updateBreakdown(inputs, allResults, filesPerPartitionData) {
+            const tiers = inputs.storageTiers;
+            const firstTier = tiers[0];
+            const costs = allResults[firstTier].breakdown;
+            const meta = costs._meta;
+            const multiTier = tiers.length > 1;
+
+            const tierNames = {
+                s3Standard: 'S3 Standard',
+                s3IA: 'S3 Std-IA',
+                glacierIR: 'Glacier IR',
+                glacierDA: 'Glacier DA'
+            };
+
+            const tierColors = {
+                s3Standard: '#ff6384',
+                s3IA: '#f59e0b',
+                glacierIR: '#36a2eb',
+                glacierDA: '#4bc0c0'
+            };
+
+            const container = document.getElementById('breakdownTable');
+
+            // Build header row - add columns for each tier if multiple selected
+            let headerRow = `<th>Component</th>`;
+            if (multiTier) {
+                tiers.forEach(t => {
+                    headerRow += `<th style="text-align: right; color: ${tierColors[t]}">${tierNames[t]}</th>`;
+                });
+            } else {
+                headerRow += `<th>Calculation</th><th style="text-align: right">Cost</th>`;
+            }
+
+            // Helper to generate multi-tier cost cells
+            const tierCells = (costKey) => {
+                if (multiTier) {
+                    return tiers.map(t =>
+                        `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].breakdown[costKey].toFixed(2)}</td>`
+                    ).join('');
+                }
+                return '';
+            };
+
+            // Build table body
+            let tbody = '';
+
+            // === Fixed costs (same across all tiers) ===
+            tbody += `
+                <tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">Kinesis Firehose (same for all tiers)</td></tr>
+                <tr>
+                    <td>Data ingestion</td>
+                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.firehose.toFixed(2)}</td>`).join('') :
+                      `<td class="calculation">${inputs.tbPerMonth} TB × $0.029/GB</td><td style="text-align: right">$${costs.firehose.toFixed(2)}</td>`}
+                </tr>
+
+                <tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">Lambda (same for all tiers)</td></tr>
+                <tr>
+                    <td>Collector Lambda</td>
+                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.collectorLambda.toFixed(2)}</td>`).join('') :
+                      `<td class="calculation">${(meta.collectorInvocationsPerMonth / 1000).toFixed(1)}K invocations × 30s</td><td style="text-align: right">$${costs.collectorLambda.toFixed(2)}</td>`}
+                </tr>
+                <tr>
+                    <td>Scheduler Lambda + S3 List</td>
+                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${(costs.schedulerLambda + costs.schedulerS3List).toFixed(2)}</td>`).join('') :
+                      `<td class="calculation">Every 15min, ListObjects per source</td><td style="text-align: right">$${(costs.schedulerLambda + costs.schedulerS3List).toFixed(2)}</td>`}
+                </tr>
+                <tr>
+                    <td>Search Lambda</td>
+                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.searchLambda.toFixed(2)}</td>`).join('') :
+                      `<td class="calculation">${(meta.workerInvocations / 1000).toFixed(0)}K workers (${meta.avgWorkersPerSearch}/search, ${meta.daysPerWorker} days each)</td><td style="text-align: right">$${costs.searchLambda.toFixed(2)}</td>`}
+                </tr>
+
+                <tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">RDS (same for all tiers)</td></tr>
+                <tr>
+                    <td>db.t4g.micro + storage</td>
+                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.rds.toFixed(2)}</td>`).join('') :
+                      `<td class="calculation">$0.016/hr × 730 hrs + 20GB</td><td style="text-align: right">$${costs.rds.toFixed(2)}</td>`}
+                </tr>
+
+                <tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">Other (same for all tiers)</td></tr>
+                <tr>
+                    <td>CloudWatch + Transfer</td>
+                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.otherTotal.toFixed(2)}</td>`).join('') :
+                      `<td class="calculation">~20 alarms + 10GB egress</td><td style="text-align: right">$${costs.otherTotal.toFixed(2)}</td>`}
+                </tr>
+            `;
+
+            // === Cold Storage (varies by tier) ===
+            tbody += `<tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">S3 Cold Storage (varies by tier)</td></tr>`;
+
+            if (multiTier) {
+                tbody += `
+                    <tr>
+                        <td>Log archive (${meta.cumulativeCompressedTB.toFixed(0)} TB)</td>
+                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].breakdown.coldStorage.toFixed(2)}</td>`).join('')}
+                    </tr>
+                    <tr>
+                        <td>Data retrieval (1% of searches)</td>
+                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].breakdown.s3Retrieval.toFixed(2)}</td>`).join('')}
+                    </tr>
+                    <tr>
+                        <td>PUT requests</td>
+                        ${tiers.map(t => `<td style="text-align: right">$${allResults[t].breakdown.s3Put.toFixed(2)}</td>`).join('')}
+                    </tr>
+                `;
+            } else {
+                tbody += `
+                    <tr>
+                        <td>Log archive</td>
+                        <td class="calculation">${meta.cumulativeCompressedTB.toFixed(0)} TB × $${(PRICING[firstTier].storagePerGB * 1024).toFixed(2)}/TB</td>
+                        <td style="text-align: right">$${costs.coldStorage.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                        <td>Data retrieval (1% of searches)</td>
+                        <td class="calculation">${meta.retrievedGB.toFixed(1)} GB × $${meta.storagePricing.retrievalPerGB}/GB</td>
+                        <td style="text-align: right">$${costs.s3Retrieval.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                        <td>PUT requests</td>
+                        <td class="calculation">${meta.filesPerMonth.toFixed(0)} files/mo</td>
+                        <td style="text-align: right">$${costs.s3Put.toFixed(2)}</td>
+                    </tr>
+                `;
+            }
+
+            // === Metadata (always S3 Standard) ===
+            tbody += `<tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">S3 Metadata (always S3 Standard)</td></tr>`;
+
+            if (multiTier) {
+                tbody += `
+                    <tr>
+                        <td>Manifests + rollup blooms (${meta.metadataGB.toFixed(1)} GB)</td>
+                        ${tiers.map(() => `<td style="text-align: right">$${costs.metadataStorage.toFixed(2)}</td>`).join('')}
+                    </tr>
+                `;
+            } else {
+                tbody += `
+                    <tr>
+                        <td>Manifests + rollup blooms</td>
+                        <td class="calculation">${meta.metadataGB.toFixed(1)} GB × $0.023/GB</td>
+                        <td style="text-align: right">$${costs.metadataStorage.toFixed(2)}</td>
+                    </tr>
+                `;
+            }
+
+            // Hot storage (same for all - uses S3 Standard)
+            tbody += `
+                <tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">S3 Hot Storage (Temp + Results)</td></tr>
+                <tr>
+                    <td>Raw landing zone (Firehose → Collector)</td>
+                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.rawStorage.toFixed(2)}</td>`).join('') :
+                      `<td class="calculation">${meta.rawStorageGB.toFixed(1)} GB × $0.023/GB</td><td style="text-align: right">$${costs.rawStorage.toFixed(2)}</td>`}
+                </tr>
+                <tr>
+                    <td>Search results (30-day TTL)</td>
+                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.searchResultsStorage.toFixed(2)}</td>`).join('') :
+                      `<td class="calculation">${meta.resultsStorageGB.toFixed(1)} GB × $0.023/GB</td><td style="text-align: right">$${costs.searchResultsStorage.toFixed(2)}</td>`}
+                </tr>
+            `;
+
+            // S3 Total
+            if (multiTier) {
+                tbody += `
+                    <tr class="subtotal">
+                        <td><strong>S3 Total</strong></td>
+                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}"><strong>$${allResults[t].breakdown.s3Total.toFixed(2)}</strong></td>`).join('')}
+                    </tr>
+                `;
+            } else {
+                tbody += `<tr class="subtotal"><td colspan="2"><strong>S3 Total</strong></td><td style="text-align: right"><strong>$${costs.s3Total.toFixed(2)}</strong></td></tr>`;
+            }
+
+            // AWS Total
+            if (multiTier) {
+                tbody += `
+                    <tr class="subtotal">
+                        <td><strong>AWS Total</strong></td>
+                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}"><strong>$${allResults[t].breakdown.awsTotal.toFixed(2)}</strong></td>`).join('')}
+                    </tr>
+                `;
+            } else {
+                tbody += `<tr class="subtotal"><td colspan="2"><strong>AWS Total</strong></td><td style="text-align: right"><strong>$${costs.awsTotal.toFixed(2)}</strong></td></tr>`;
+            }
+
+            // GS Fee (same for all)
+            tbody += `
+                <tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">Glaciersearch</td></tr>
+                <tr>
+                    <td>Platform fee (${inputs.tbPerMonth} TB × $0.03/GB)</td>
+                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.gsFee.toFixed(2)}</td>`).join('') :
+                      `<td class="calculation">${inputs.tbPerMonth} TB × 1024 GB × $0.03/GB</td><td style="text-align: right">$${costs.gsFee.toFixed(2)}</td>`}
+                </tr>
+            `;
+
+            // Grand Total
+            if (multiTier) {
+                tbody += `
+                    <tr class="grand-total">
+                        <td>Grand Total (Month 24)</td>
+                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].breakdown.grandTotal.toFixed(2)}</td>`).join('')}
+                    </tr>
+                `;
+            } else {
+                tbody += `<tr class="grand-total"><td colspan="2">Grand Total (Month 24)</td><td style="text-align: right">$${costs.grandTotal.toFixed(2)}</td></tr>`;
+            }
+
+            // Efficiency metrics
+            tbody += `<tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">Efficiency Metrics</td></tr>`;
+            if (multiTier) {
+                tbody += `
+                    <tr>
+                        <td>$/GB stored (raw)</td>
+                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}; font-weight: 600">$${allResults[t].breakdown.perGBStored.toFixed(4)}/GB</td>`).join('')}
+                    </tr>
+                `;
+            } else {
+                tbody += `
+                    <tr>
+                        <td>$/GB stored (raw)</td>
+                        <td class="calculation">$${costs.grandTotal.toFixed(2)} ÷ ${(meta.cumulativeRawGB / 1024).toFixed(0)} TB</td>
+                        <td style="text-align: right; color: #06b6d4; font-weight: 600">$${costs.perGBStored.toFixed(4)}/GB</td>
+                    </tr>
+                `;
+            }
+
+            container.innerHTML = `
+                <thead>
+                    <tr>${headerRow}</tr>
+                </thead>
+                <tbody>${tbody}</tbody>
+            `;
+        }
+
+        // Event listeners
+        document.querySelectorAll('input, select').forEach(el => {
+            el.addEventListener('input', updateAll);
+            el.addEventListener('change', updateAll);
+        });
+
+        // Initialize
+        updateAll();
+    </script>
+</body>
+</html>
