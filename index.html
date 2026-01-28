@@ -645,7 +645,8 @@
                     monthlyCosts: [],
                     perGBCosts: [],
                     totalCost: 0,
-                    breakdown: null
+                    breakdown: null,
+                    year7Breakdown: null
                 };
 
                 for (let month = 1; month <= months; month++) {
@@ -657,6 +658,9 @@
                     }
                 }
                 allResults[tier].totalCost = allResults[tier].monthlyCosts.reduce((a, b) => a + b, 0);
+
+                // Calculate Year 7 (month 84) costs for breakdown display
+                allResults[tier].year7Breakdown = calculateCosts(inputs, tier, 84, filesPerPartitionData);
             }
 
             updateChart(allResults);
@@ -1003,6 +1007,19 @@
                 `;
             } else {
                 tbody += `<tr class="grand-total"><td colspan="2">Grand Total (Month 24)</td><td style="text-align: right">$${costs.grandTotal.toFixed(2)}</td></tr>`;
+            }
+
+            // Year 7 (Month 84) projection
+            if (multiTier) {
+                tbody += `
+                    <tr class="grand-total" style="background: #fef3c7;">
+                        <td>Grand Total (Year 7 / Month 84)</td>
+                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].year7Breakdown.grandTotal.toFixed(2)}</td>`).join('')}
+                    </tr>
+                `;
+            } else {
+                const year7Costs = allResults[firstTier].year7Breakdown;
+                tbody += `<tr class="grand-total" style="background: #fef3c7;"><td colspan="2">Grand Total (Year 7 / Month 84)</td><td style="text-align: right">$${year7Costs.grandTotal.toFixed(2)}</td></tr>`;
             }
 
             // Efficiency metrics
