@@ -684,8 +684,8 @@
             <div class="hero-content">
                 <h1>Glacier pricing.<br><span class="highlight">Instant search.</span></h1>
                 <p class="subheadline">Stream logs through Firehose. Store compressed in <strong>Glacier Instant Retrieval</strong>. Search with hierarchical bloom filters. All in your AWS account.</p>
-                <form class="cta-form" id="hero-form">
-                    <input type="email" placeholder="you@company.com" required>
+                <form class="cta-form" id="hero-form" action="https://formspree.io/f/xpqryage" method="POST">
+                    <input type="email" name="email" placeholder="you@company.com" required>
                     <button type="submit">Get Early Access</button>
                 </form>
                 <p class="microcopy">Currently in private beta. We'll reach out soon.</p>
@@ -963,8 +963,8 @@
         <div class="container">
             <h2>Stop paying hot-storage prices for cold data.</h2>
             <p class="body">We're working with a small group of design partners. If you're spending $10k+/month on log retention, let's talk.</p>
-            <form class="cta-form" id="footer-form">
-                <input type="email" placeholder="you@company.com" required>
+            <form class="cta-form" id="footer-form" action="https://formspree.io/f/xpqryage" method="POST">
+                <input type="email" name="email" placeholder="you@company.com" required>
                 <button type="submit">Get Early Access</button>
             </form>
             <p class="microcopy">Currently in private beta. We'll reach out soon.</p>
@@ -978,27 +978,41 @@
     </footer>
 
     <script>
-        // Simple form handling - replace with your email service
+        // Formspree AJAX submission
         document.querySelectorAll('form').forEach(form => {
-            form.addEventListener('submit', function(e) {
+            form.addEventListener('submit', async function(e) {
                 e.preventDefault();
-                const email = this.querySelector('input[type="email"]').value;
-
-                // Replace this with your actual form submission
-                // Options: Buttondown, ConvertKit, Google Forms, etc.
-                console.log('Email submitted:', email);
-
-                // Show success message
                 const button = this.querySelector('button');
                 const originalText = button.textContent;
-                button.textContent = 'Thanks!';
+
+                // Show loading state
+                button.textContent = 'Sending...';
                 button.disabled = true;
 
-                setTimeout(() => {
-                    button.textContent = originalText;
+                try {
+                    const response = await fetch(this.action, {
+                        method: 'POST',
+                        body: new FormData(this),
+                        headers: { 'Accept': 'application/json' }
+                    });
+
+                    if (response.ok) {
+                        button.textContent = 'Thanks!';
+                        this.reset();
+                        setTimeout(() => {
+                            button.textContent = originalText;
+                            button.disabled = false;
+                        }, 3000);
+                    } else {
+                        throw new Error('Form submission failed');
+                    }
+                } catch (error) {
+                    button.textContent = 'Error - try again';
                     button.disabled = false;
-                    this.reset();
-                }, 3000);
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                    }, 3000);
+                }
             });
         });
     </script>
