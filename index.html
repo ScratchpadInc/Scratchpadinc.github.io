@@ -3,1060 +3,1018 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GlacierSearch AWS Cost Model</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>Glaciersearch - Glacier pricing. Instant search.</title>
+    <meta name="description" content="Search years of logs at Glacier storage prices. Instant results, no restore delays. All in your AWS account.">
     <style>
+        :root {
+            --bg-primary: #1a1b26;
+            --bg-secondary: #24283b;
+            --bg-tertiary: #1f2335;
+            --text-primary: #c0caf5;
+            --text-secondary: #a9b1d6;
+            --text-muted: #565f89;
+            --accent: #7aa2f7;
+            --accent-hover: #89b4fa;
+            --success: #9ece6a;
+            --warning: #e0af68;
+            --error: #f7768e;
+            --border: #3b4261;
+            --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+        }
+
         * {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            max-width: 1400px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1100px;
             margin: 0 auto;
-            padding: 20px;
-            background: #f5f5f5;
-            color: #333;
+            padding: 0 2rem;
         }
-        h1 {
-            color: #1a1a2e;
-            margin-bottom: 10px;
+
+        /* Navigation */
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(26, 27, 38, 0.9);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            padding: 0.75rem 0;
         }
-        .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-        }
-        .section {
-            background: white;
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        .section h2 {
-            margin-top: 0;
-            color: #1a1a2e;
-            font-size: 18px;
-            border-bottom: 2px solid #e5e7eb;
-            padding-bottom: 10px;
-        }
-        .controls {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 20px;
-        }
-        .control-group {
+
+        .nav .container {
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
         }
-        .control-group label {
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: var(--font-mono);
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+
+        .nav-logo img {
+            height: 28px;
+            width: auto;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-primary);
+        }
+
+        .nav-cta {
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
             font-weight: 600;
-            margin-bottom: 8px;
-            color: #444;
-            font-size: 14px;
+            background: var(--accent);
+            color: var(--bg-primary) !important;
+            border-radius: 5px;
+            transition: background 0.2s;
         }
-        .control-group input, .control-group select {
-            padding: 10px 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
+
+        .nav-cta:hover {
+            background: var(--accent-hover);
         }
-        .control-group input:focus, .control-group select:focus {
+
+        @media (max-width: 768px) {
+            .nav-links a:not(.nav-cta) {
+                display: none;
+            }
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 80vh;
+            display: flex;
+            align-items: center;
+            padding: 4rem 0;
+            padding-top: 6rem;
+        }
+
+        .hero-content {
+            max-width: 800px;
+        }
+
+        .hero h1 {
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 700;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+        }
+
+        .hero h1 .highlight {
+            color: var(--accent);
+            font-family: var(--font-mono);
+        }
+
+        .hero .subheadline {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            margin-bottom: 2.5rem;
+            max-width: 600px;
+        }
+
+        .hero .subheadline strong {
+            color: var(--text-primary);
+        }
+
+        .cta-form {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+
+        .cta-form input[type="email"] {
+            flex: 1;
+            min-width: 280px;
+            padding: 1rem 1.25rem;
+            font-size: 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+        }
+
+        .cta-form input[type="email"]:focus {
             outline: none;
-            border-color: #4a90d9;
-            box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+            border-color: var(--accent);
         }
-        .control-group .hint {
-            font-size: 12px;
-            color: #888;
-            margin-top: 4px;
+
+        .cta-form button {
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            background: var(--accent);
+            color: var(--bg-primary);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
         }
-        .chart-container {
-            height: 400px;
+
+        .cta-form button:hover {
+            background: var(--accent-hover);
         }
-        .breakdown-table {
+
+        .microcopy {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        /* Cost Comparison Section */
+        .cost-section {
+            padding: 5rem 0;
+            background: var(--bg-secondary);
+        }
+
+        .section-title {
+            font-size: 1.75rem;
+            margin-bottom: 2.5rem;
+            text-align: center;
+        }
+
+        .cost-table-wrapper {
+            overflow-x: auto;
+        }
+
+        .cost-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 14px;
+            margin-bottom: 3rem;
         }
-        .breakdown-table th, .breakdown-table td {
-            padding: 10px 12px;
+
+        .cost-table th,
+        .cost-table td {
+            padding: 1rem 1.5rem;
             text-align: left;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--border);
         }
-        .breakdown-table th {
-            background: #f8f9fa;
+
+        .cost-table th {
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .cost-table tr:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .cost-table tr.highlight-row {
+            background: rgba(122, 162, 247, 0.1);
+        }
+
+        .cost-table tr.highlight-row td {
+            color: var(--accent);
             font-weight: 600;
-            color: #444;
         }
-        .breakdown-table tr:hover {
-            background: #f8f9fa;
-        }
-        .breakdown-table .section-header {
-            background: #e5e7eb;
+
+        .cost-table .cost {
+            font-family: var(--font-mono);
             font-weight: 600;
         }
-        .breakdown-table .subtotal {
+
+        .cost-table .note {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        /* Bar Chart */
+        .chart-container {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .chart-bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .chart-label {
+            width: 140px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .chart-bar-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .chart-bar-fill {
+            height: 32px;
+            border-radius: 4px;
+            background: var(--text-muted);
+            transition: width 0.5s ease;
+        }
+
+        .chart-bar-fill.accent {
+            background: var(--accent);
+        }
+
+        .chart-value {
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            min-width: 80px;
+        }
+
+        .chart-value.accent {
+            color: var(--accent);
             font-weight: 600;
-            background: #f0fdf4;
         }
-        .breakdown-table .grand-total {
-            font-weight: 700;
-            background: #d1fae5;
-            font-size: 16px;
+
+        .chart-note {
+            text-align: center;
+            margin-top: 1.5rem;
+            color: var(--text-muted);
+            font-size: 0.875rem;
         }
-        .breakdown-table .calculation {
-            color: #666;
-            font-family: monospace;
-            font-size: 12px;
+
+        /* Best of Both Worlds */
+        .hybrid-section {
+            padding: 5rem 0;
         }
-        .assumptions {
-            background: #fffbeb;
+
+        .hybrid-diagram {
+            max-width: 700px;
+            margin: 0 auto;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 2.5rem;
+            border: 1px solid var(--border);
+        }
+
+        .hybrid-flow {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .hybrid-source {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .hybrid-source .label {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            min-width: 80px;
+        }
+
+        .hybrid-arrow {
+            color: var(--text-muted);
+            font-size: 1.25rem;
+        }
+
+        .hybrid-split {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            flex: 1;
+        }
+
+        .hybrid-path {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem 1.25rem;
             border-radius: 8px;
-            padding: 20px;
-            font-size: 14px;
+            background: var(--bg-tertiary);
         }
-        .assumptions h3 {
-            margin-top: 0;
-            color: #92400e;
+
+        .hybrid-path.hot {
+            border-left: 3px solid var(--warning);
         }
-        .assumptions ul {
-            margin: 0;
-            padding-left: 20px;
+
+        .hybrid-path.cold {
+            border-left: 3px solid var(--accent);
         }
-        .assumptions li {
-            margin-bottom: 5px;
+
+        .hybrid-path .destination {
+            font-weight: 600;
+            color: var(--text-primary);
+            min-width: 140px;
         }
-        .two-col {
+
+        .hybrid-path.hot .destination {
+            color: var(--warning);
+        }
+
+        .hybrid-path.cold .destination {
+            color: var(--accent);
+        }
+
+        .hybrid-path .details {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .hybrid-path .cost {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            margin-left: auto;
+            white-space: nowrap;
+        }
+
+        .hybrid-path.hot .cost {
+            color: var(--warning);
+        }
+
+        .hybrid-path.cold .cost {
+            color: var(--accent);
+        }
+
+        .hybrid-tagline {
+            text-align: center;
+            margin-top: 2rem;
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .hybrid-tagline strong {
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 600px) {
+            .hybrid-diagram {
+                padding: 1.5rem;
+            }
+
+            .hybrid-path {
+                flex-wrap: wrap;
+            }
+
+            .hybrid-path .cost {
+                margin-left: 0;
+                width: 100%;
+                margin-top: 0.5rem;
+            }
+        }
+
+        /* How It Works */
+        .how-section {
+            padding: 5rem 0;
+        }
+
+        .steps {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
         }
-        @media (max-width: 900px) {
-            .two-col {
+
+        .step {
+            background: var(--bg-secondary);
+            padding: 2rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .step-number {
+            display: inline-block;
+            width: 36px;
+            height: 36px;
+            line-height: 36px;
+            text-align: center;
+            background: var(--accent);
+            color: var(--bg-primary);
+            font-weight: 700;
+            border-radius: 50%;
+            margin-bottom: 1rem;
+        }
+
+        .step h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .step p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        /* Use Cases */
+        .usecases-section {
+            padding: 5rem 0;
+            background: var(--bg-secondary);
+        }
+
+        .usecases {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .usecase {
+            padding: 1.5rem;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            border-left: 3px solid var(--accent);
+        }
+
+        .usecase h3 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .usecase p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Technical Details */
+        .tech-section {
+            padding: 5rem 0;
+        }
+
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1.5rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .tech-stat {
+            text-align: center;
+            padding: 1.5rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .tech-stat .value {
+            font-family: var(--font-mono);
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+
+        .tech-stat .label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* Final CTA */
+        .final-cta {
+            padding: 5rem 0;
+            background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+            text-align: center;
+        }
+
+        .final-cta h2 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .final-cta .body {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .final-cta .cta-form {
+            justify-content: center;
+        }
+
+        /* FAQ Section */
+        .faq-section {
+            padding: 5rem 0;
+            background: var(--bg-secondary);
+        }
+
+        .faq-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 1.5rem;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .faq-item {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 1.5rem;
+            border: 1px solid var(--border);
+        }
+
+        .faq-item h3 {
+            font-size: 1rem;
+            color: var(--text-primary);
+            margin-bottom: 0.75rem;
+        }
+
+        .faq-item p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 500px) {
+            .faq-grid {
                 grid-template-columns: 1fr;
             }
         }
-        .storage-toggle {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
+
+        /* Footer */
+        footer {
+            padding: 2rem 0;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
         }
-        .storage-toggle label {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 8px 12px;
-            border: 2px solid #e5e7eb;
+
+        /* Form Success State */
+        .form-message {
+            padding: 1rem;
             border-radius: 6px;
-            cursor: pointer;
-            font-weight: normal;
-            font-size: 13px;
-            transition: all 0.2s;
+            margin-top: 1rem;
+            display: none;
         }
-        .storage-toggle label:hover {
-            border-color: #3b82f6;
+
+        .form-message.success {
+            background: rgba(158, 206, 106, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
         }
-        .storage-toggle input:checked + span {
-            color: #3b82f6;
+
+        .form-message.error {
+            background: rgba(247, 118, 142, 0.1);
+            border: 1px solid var(--error);
+            color: var(--error);
         }
-        .storage-toggle label:has(input:checked) {
-            border-color: #3b82f6;
-            background: #eff6ff;
-        }
-        .storage-toggle input {
-            accent-color: #3b82f6;
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 1.5rem;
+            }
+
+            .hero {
+                min-height: auto;
+                padding: 3rem 0;
+                padding-top: 5rem;
+            }
+
+            .cta-form {
+                flex-direction: column;
+            }
+
+            .cta-form input[type="email"] {
+                min-width: 100%;
+            }
+
+            .chart-label {
+                width: 100px;
+                font-size: 0.75rem;
+            }
+
+            .cost-table th,
+            .cost-table td {
+                padding: 0.75rem 1rem;
+            }
         }
     </style>
 </head>
 <body>
-    <h1>GlacierSearch AWS Cost Model</h1>
-    <p class="subtitle">Detailed cost breakdown for Glaciersearch infrastructure over 24 months</p>
-
-    <!-- Input Parameters -->
-    <div class="section">
-        <h2>Configuration Parameters</h2>
-        <div class="controls">
-            <div class="control-group">
-                <label for="tbPerMonth">TB Ingested / Month</label>
-                <input type="number" id="tbPerMonth" value="10" min="0.1" step="1">
-                <span class="hint">Raw log data before compression</span>
-            </div>
-            <div class="control-group">
-                <label for="numSources">Number of Sources</label>
-                <input type="number" id="numSources" value="1000" min="1" step="100">
-                <span class="hint">Distinct log sources (apps/services)</span>
-            </div>
-            <div class="control-group">
-                <label for="collectorThresholdMB">Collector Threshold (MB)</label>
-                <input type="number" id="collectorThresholdMB" value="128" min="64" max="512" step="32">
-                <span class="hint">Raw data size before collection (64-512 MB)</span>
-            </div>
-            <div class="control-group">
-                <label for="batchInterval">Collector Interval</label>
-                <select id="batchInterval">
-                    <option value="1440">Daily (24hr)</option>
-                    <option value="720">Twice daily (12hr)</option>
-                    <option value="360">4x daily (6hr)</option>
-                    <option value="60">Hourly</option>
-                </select>
-                <span class="hint">Max time before collection</span>
-            </div>
-            <div class="control-group">
-                <label for="searchesPerDay">Searches / Day</label>
-                <input type="number" id="searchesPerDay" value="100" min="0" step="1">
-                <span class="hint">Average daily search queries</span>
-            </div>
-            <div class="control-group">
-                <label for="compressionRatio">Compression Ratio</label>
-                <input type="number" id="compressionRatio" value="10" min="1" max="20" step="0.5">
-                <span class="hint">Raw:Compressed (10x = 10% of raw)</span>
-            </div>
-            <div class="control-group">
-                <label for="partitionsPerSearch">Max Partitions / Search</label>
-                <input type="number" id="partitionsPerSearch" value="30000" min="1" max="100000" step="1000">
-                <span class="hint">days × sources limit (e.g., 30 days × 1000 sources)</span>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="container">
+            <a href="#" class="nav-logo"><img src="logo.png" alt="Glaciersearch">Glaciersearch</a>
+            <div class="nav-links">
+                <a href="#cost">Pricing</a>
+                <a href="#how">How it works</a>
+                <a href="#faq">FAQ</a>
+                <a href="#cta" class="nav-cta">Get Early Access</a>
             </div>
         </div>
-    </div>
+    </nav>
 
-    <!-- Storage Class Selection -->
-    <div class="section">
-        <h2>Storage Classes to Compare</h2>
-        <div class="storage-toggle">
-            <label>
-                <input type="checkbox" id="toggleS3Standard" value="s3Standard">
-                <span>S3 Standard ($0.023/GB)</span>
-            </label>
-            <label>
-                <input type="checkbox" id="toggleS3IA" value="s3IA">
-                <span>S3 Standard-IA ($0.0125/GB)</span>
-            </label>
-            <label>
-                <input type="checkbox" id="toggleGlacierIR" value="glacierIR" checked>
-                <span>Glacier Instant ($0.004/GB)</span>
-            </label>
-            <label>
-                <input type="checkbox" id="toggleGlacierDA" value="glacierDA">
-                <span>Glacier Deep Archive ($0.00099/GB)</span>
-            </label>
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h1>Glacier pricing.<br><span class="highlight">Instant search.</span></h1>
+                <p class="subheadline">Stream logs through Firehose. Store compressed in <strong>Glacier Instant Retrieval</strong>. Search with hierarchical bloom filters. All in your AWS account.</p>
+                <form class="cta-form" id="hero-form" action="https://formspree.io/f/xpqryage" method="POST">
+                    <input type="email" name="email" placeholder="you@company.com" required>
+                    <button type="submit">Get Early Access</button>
+                </form>
+                <p class="microcopy">Currently in private beta. We'll reach out soon.</p>
+            </div>
         </div>
-        <p class="hint" style="margin-top: 10px;">Glacier IR recommended for instant search. Deep Archive requires 12-48hr retrieval.</p>
-    </div>
-
-    <!-- Chart -->
-    <div class="section">
-        <h2>Monthly Cost Over 24 Months</h2>
-        <div class="chart-container">
-            <canvas id="costChart"></canvas>
-        </div>
-    </div>
-
-    <!-- Two Column Layout -->
-    <div class="two-col">
-        <!-- Cost Breakdown Table -->
-        <div class="section">
-            <h2>Month 24 Cost Breakdown</h2>
-            <table class="breakdown-table" id="breakdownTable"></table>
-        </div>
-
-        <!-- Assumptions -->
-        <div class="section assumptions">
-            <h3>Model Assumptions</h3>
-            <ul>
-                <li><strong>Two-stage ingestion:</strong> Firehose (128MB/15min) → S3 Raw → Collector Lambda (threshold/interval) → S3 Cold.</li>
-                <li><strong>Firehose:</strong> 1 stream per source. $0.029/GB ingested. Buffers at 128MB or 15 min.</li>
-                <li><strong>Collector Lambda:</strong> 1GB memory, ~30s runtime. Aggregates raw files, writes partition manifest to S3.</li>
-                <li><strong>Scheduler Lambda:</strong> Runs every 15 min, checks source paths via S3 ListObjects to trigger collection.</li>
-                <li><strong>Raw landing zone:</strong> S3 Standard. Deleted by Collector after successful write (typically &lt;24hr retention).</li>
-                <li><strong>Pareto distribution:</strong> Top 20% of sources generate 80% of data. Heavy sources trigger on size; light sources on time.</li>
-                <li><strong>Search architecture:</strong> Coordinator (128MB, 2s) fetches rollup blooms → prunes days → fans out to per-source Workers (256MB).</li>
-                <li><strong>Hierarchical bloom filters:</strong> Monthly rollups → daily rollups → partition blooms. ~50% of days pruned by rollup blooms on average.</li>
-                <li><strong>Workers fetch manifests:</strong> Each worker fetches ~750KB manifests for its source from S3, evaluates partition blooms.</li>
-                <li><strong>Metadata:</strong> ~1% of compressed storage in S3 Standard (partition manifests with bloom filters, zone maps, file lists + rollup blooms).</li>
-                <li><strong>Pure S3 metadata:</strong> Open partitions stored as S3 objects (bloom.bin, stats.json, files.json). ~$2/mo for API calls.</li>
-                <li><strong>Max partitions per search:</strong> days × sources limit. E.g., 30,000 = 30 days × 1000 sources (worst case cross-source query).</li>
-                <li><strong>Bloom filter FPR:</strong> 1% false positive rate. 99% of workers finish after manifest evaluation; 1% scan data files.</li>
-            </ul>
-        </div>
-    </div>
-
-    <!-- AWS Pricing Reference -->
-    <div class="section">
-        <h2>AWS Pricing Reference (US East)</h2>
-        <table class="breakdown-table">
-            <thead>
-                <tr>
-                    <th>Service</th>
-                    <th>Component</th>
-                    <th>Price</th>
-                    <th>Unit</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr><td>Kinesis Firehose</td><td>Data ingestion</td><td>$0.029</td><td>per GB</td></tr>
-                <tr><td>Lambda</td><td>Invocations</td><td>$0.20</td><td>per million</td></tr>
-                <tr><td>Lambda</td><td>Compute</td><td>$0.0000166667</td><td>per GB-second</td></tr>
-                <tr><td>S3 Standard</td><td>Storage</td><td>$0.023</td><td>per GB/month</td></tr>
-                <tr><td>S3 Standard-IA</td><td>Storage</td><td>$0.0125</td><td>per GB/month</td></tr>
-                <tr><td>S3 Standard-IA</td><td>Retrieval</td><td>$0.01</td><td>per GB</td></tr>
-                <tr><td>Glacier Instant</td><td>Storage</td><td>$0.004</td><td>per GB/month</td></tr>
-                <tr><td>Glacier Instant</td><td>Retrieval</td><td>$0.03</td><td>per GB</td></tr>
-                <tr><td>Glacier Deep Archive</td><td>Storage</td><td>$0.00099</td><td>per GB/month</td></tr>
-                <tr><td>Glacier Deep Archive</td><td>Retrieval</td><td>$0.02</td><td>per GB</td></tr>
-                <tr><td>S3</td><td>PUT requests</td><td>$0.005</td><td>per 1,000</td></tr>
-                <tr><td>S3</td><td>GET requests</td><td>$0.0004</td><td>per 1,000</td></tr>
-            </tbody>
-        </table>
-    </div>
-
-    <script>
-        // AWS Pricing Constants (US East)
-        const PRICING = {
-            firehose: {
-                perGB: 0.029  // $0.029 per GB ingested
-            },
-            lambda: {
-                invocationPerMillion: 0.20,
-                gbSecond: 0.0000166667
-            },
-            s3Standard: {
-                storagePerGB: 0.023,
-                putPer1k: 0.005,
-                getPer1k: 0.0004,
-                retrievalPerGB: 0
-            },
-            s3IA: {
-                storagePerGB: 0.0125,
-                putPer1k: 0.01,
-                getPer1k: 0.001,
-                retrievalPerGB: 0.01
-            },
-            glacierIR: {
-                storagePerGB: 0.004,
-                putPer1k: 0.02,
-                getPer1k: 0.01,
-                retrievalPerGB: 0.03
-            },
-            glacierDA: {
-                storagePerGB: 0.00099,
-                putPer1k: 0.05,
-                getPer1k: 0.0004,
-                retrievalPerGB: 0.02
-            },
-            s3Api: {
-                putPer1k: 0.005,
-                getPer1k: 0.0004
-            }
-        };
-
-        // Glaciersearch fee
-        const GS_FEE_PER_GB = 0.03;
-
-        let chart;
-
-        function getInputs() {
-            return {
-                tbPerMonth: parseFloat(document.getElementById('tbPerMonth').value) || 10,
-                numSources: parseInt(document.getElementById('numSources').value) || 1000,
-                collectorThresholdMB: parseInt(document.getElementById('collectorThresholdMB').value) || 128,
-                batchInterval: parseInt(document.getElementById('batchInterval').value) || 1440,
-                searchesPerDay: parseInt(document.getElementById('searchesPerDay').value) || 100,
-                compressionRatio: parseFloat(document.getElementById('compressionRatio').value) || 10,
-                // Search scope
-                partitionsPerSearch: parseInt(document.getElementById('partitionsPerSearch').value) || 100,
-                storageTiers: getSelectedStorageTiers()
-            };
-        }
-
-        // Calculate files per partition based on batch interval and Pareto distribution
-        // Partition = source + time bucket (e.g., day)
-        // Max file size: 10MB compressed (100MB raw at 10x compression)
-        // Files are created when: size threshold (100MB raw) OR age threshold (batch interval) is reached
-        function calculateFilesPerPartition(inputs) {
-            const { tbPerMonth, numSources, compressionRatio, batchInterval } = inputs;
-
-            const gbPerMonth = tbPerMonth * 1024;
-            const maxRawFileSizeMB = 100; // Trigger at 100MB raw
-
-            // Pareto distribution: top 20% sources = 80% of data
-            const heavySourceCount = Math.floor(numSources * 0.2);
-            const lightSourceCount = numSources - heavySourceCount;
-
-            // Data per source type per day
-            const totalGBPerDay = gbPerMonth / 30;
-            const heavySourceGBPerDay = (totalGBPerDay * 0.8) / heavySourceCount; // Per heavy source
-            const lightSourceGBPerDay = (totalGBPerDay * 0.2) / lightSourceCount; // Per light source
-
-            // Files per day per source type (based on size threshold)
-            const heavyFilesPerDay = Math.max(1, Math.ceil((heavySourceGBPerDay * 1024) / maxRawFileSizeMB));
-            const lightFilesPerDay = Math.max(1, Math.ceil((lightSourceGBPerDay * 1024) / maxRawFileSizeMB));
-
-            // If batch interval forces more frequent batching, that increases files
-            const batchesPerDay = 1440 / batchInterval;
-            const heavyFilesWithBatching = Math.max(heavyFilesPerDay, batchesPerDay);
-            const lightFilesWithBatching = Math.max(lightFilesPerDay, batchesPerDay);
-
-            // Weighted average across all sources
-            const avgFilesPerPartition = (heavySourceCount * heavyFilesWithBatching +
-                                          lightSourceCount * lightFilesWithBatching) / numSources;
-
-            return {
-                avgFilesPerPartition: Math.ceil(avgFilesPerPartition),
-                heavyFilesPerDay: Math.ceil(heavyFilesWithBatching),
-                lightFilesPerDay: Math.ceil(lightFilesWithBatching),
-                heavySourceGBPerDay,
-                lightSourceGBPerDay
-            };
-        }
-
-        function getSelectedStorageTiers() {
-            const tiers = [];
-            if (document.getElementById('toggleS3Standard').checked) tiers.push('s3Standard');
-            if (document.getElementById('toggleS3IA').checked) tiers.push('s3IA');
-            if (document.getElementById('toggleGlacierIR').checked) tiers.push('glacierIR');
-            if (document.getElementById('toggleGlacierDA').checked) tiers.push('glacierDA');
-            return tiers.length > 0 ? tiers : ['glacierIR'];
-        }
-
-        function calculateCosts(inputs, storageTier, month, filesPerPartitionData) {
-            const { tbPerMonth, numSources, collectorThresholdMB, batchInterval, searchesPerDay, compressionRatio,
-                    partitionsPerSearch } = inputs;
-            const filesPerPartition = filesPerPartitionData.avgFilesPerPartition;
-
-            const gbPerMonth = tbPerMonth * 1024;
-            const compressedGBPerMonth = gbPerMonth / compressionRatio;
-
-            // Cumulative storage at this month (raw, not compressed - for $/GB calculation)
-            const cumulativeRawGB = gbPerMonth * month;
-            const cumulativeCompressedTB = (compressedGBPerMonth * month) / 1024;
-            const cumulativeCompressedGB = compressedGBPerMonth * month;
-
-            const storagePricing = PRICING[storageTier];
-            const costs = {};
-
-            // === Kinesis Firehose ===
-            // Per-GB pricing: $0.029/GB ingested
-            costs.firehose = gbPerMonth * PRICING.firehose.perGB;
-
-            // === Two-Stage Ingestion ===
-            // Stage 1: Firehose flushes at 128MB or 15min (whichever first)
-            // Stage 2: Collector Lambda aggregates raw files until collectorThresholdMB or batchInterval
-
-            const firehoseBufferMB = 128; // Max Firehose buffer
-            const firehoseIntervalMin = 15; // Firehose time buffer
-
-            // Pareto distribution: 20% sources = 80% data
-            const heavySourceCount = Math.floor(numSources * 0.2);
-            const lightSourceCount = numSources - heavySourceCount;
-            const rawGBPerDay = gbPerMonth / 30;
-            const heavySourceGBPerDay = (rawGBPerDay * 0.8) / heavySourceCount;
-            const lightSourceGBPerDay = (rawGBPerDay * 0.2) / lightSourceCount;
-
-            // Heavy sources: triggered by size threshold
-            // How many times per day does a heavy source hit collectorThresholdMB?
-            const heavyCollectionsPerDay = Math.max(1, (heavySourceGBPerDay * 1024) / collectorThresholdMB);
-
-            // Light sources: triggered by time threshold (once per batch interval)
-            const batchesPerDay = 1440 / batchInterval;
-            const lightCollectionsPerDay = batchesPerDay; // Time-triggered
-
-            // Total collector invocations per month
-            const collectorInvocationsPerMonth = 30 * (
-                heavySourceCount * heavyCollectionsPerDay +
-                lightSourceCount * lightCollectionsPerDay
-            );
-
-            const collectorMemoryGB = 1;
-            const collectorRuntimeSec = 30;
-            costs.collectorLambdaInvoke = (collectorInvocationsPerMonth / 1_000_000) * PRICING.lambda.invocationPerMillion;
-            costs.collectorLambdaCompute = collectorInvocationsPerMonth * collectorRuntimeSec * collectorMemoryGB * PRICING.lambda.gbSecond;
-            costs.collectorLambda = costs.collectorLambdaInvoke + costs.collectorLambdaCompute;
-
-            // Scheduler Lambda: runs every 15 min, checks all sources
-            const schedulerInvocationsPerMonth = 4 * 24 * 30; // 4/hr * 24hr * 30days
-            const schedulerMemoryGB = 0.256;
-            const schedulerRuntimeSec = 5; // Quick ListObjects per source
-            costs.schedulerLambda = schedulerInvocationsPerMonth * schedulerRuntimeSec * schedulerMemoryGB * PRICING.lambda.gbSecond;
-
-            // S3 ListObjects for scheduler (~$0.005/1000 requests)
-            // Each scheduler run lists objects for active sources (simplified: all sources)
-            const listRequestsPerMonth = schedulerInvocationsPerMonth * numSources;
-            costs.schedulerS3List = (listRequestsPerMonth / 1000) * 0.005;
-
-            costs.ingestionLambda = costs.collectorLambda + costs.schedulerLambda + costs.schedulerS3List;
-
-            // === S3 Storage ===
-
-            // S3 Raw landing zone (temporary storage before collection)
-            // Average raw data in flight: ~1 day's worth at any time (collected within batchInterval)
-            // With daily batching, ~1 day of data; with hourly, ~1 hour
-            const avgRawRetentionDays = batchInterval / 1440; // fraction of a day
-            const rawStorageGB = rawGBPerDay * Math.max(avgRawRetentionDays, 0.5); // At least 12hr buffer
-            costs.rawStorage = rawStorageGB * PRICING.s3Standard.storagePerGB;
-
-            // Cold storage (compressed data)
-            costs.coldStorage = cumulativeCompressedGB * storagePricing.storagePerGB;
-
-            // Metadata storage in S3 Standard:
-            // - Partition manifests: ~750KB each = ~1% of compressed data
-            // - Monthly rollup blooms: ~1MB per source per month
-            // - Daily rollup indexes: ~2KB per day (negligible)
-            const partitionManifestsGB = cumulativeCompressedGB * 0.01;
-            const monthlyRollupGB = (month * numSources * 1) / 1024; // 1MB per source per month
-            const metadataGB = partitionManifestsGB + monthlyRollupGB;
-            costs.metadataStorage = metadataGB * PRICING.s3Standard.storagePerGB;
-
-            // PUT requests (files written this month)
-            // Collector writes compressed files: total data / (threshold * compression ratio)
-            const filesPerMonth = collectorInvocationsPerMonth; // 1 file per collection
-            costs.s3Put = (filesPerMonth / 1000) * storagePricing.putPer1k;
-
-            // === Search Lambda (Coordinator + Per-Source Workers) ===
-            const searchesPerMonth = searchesPerDay * 30;
-
-            // Search scope: partitionsPerSearch = days × sources limit
-            // E.g., 30,000 = 30 days × 1000 sources (worst case cross-source query)
-            // Rollup blooms prune ~50% of days on average before we fetch manifests
-            const rollupPruneRatio = 0.5;
-            const effectivePartitions = partitionsPerSearch * (1 - rollupPruneRatio);
-
-            // Workers = unique sources touched (not partitions)
-            // If partitionsPerSearch = 30 days × 1000 sources, workers = 1000 (one per source)
-            // If partitionsPerSearch = 7 days × 1 source, workers = 1
-            // Approximate: sqrt(partitions) for mixed queries, capped at numSources
-            const avgWorkersPerSearch = Math.min(
-                Math.ceil(Math.sqrt(effectivePartitions)),
-                numSources
-            );
-            const workerInvocations = searchesPerMonth * avgWorkersPerSearch;
-
-            // Manifest fetches: each worker fetches manifests for its source
-            // Days per worker = effectivePartitions / workers
-            const daysPerWorker = Math.ceil(effectivePartitions / avgWorkersPerSearch);
-            const manifestGetsPerSearch = avgWorkersPerSearch * daysPerWorker;
-            const totalManifestGets = searchesPerMonth * manifestGetsPerSearch;
-
-            // Coordinator Lambda: fetches rollup blooms, prunes days, invokes workers
-            const coordinatorMemoryGB = 0.128;
-            const coordinatorRuntimeSec = 2;
-            costs.coordinatorLambda = (searchesPerMonth / 1_000_000) * PRICING.lambda.invocationPerMillion +
-                                       searchesPerMonth * coordinatorRuntimeSec * coordinatorMemoryGB * PRICING.lambda.gbSecond;
-
-            // Worker Lambda: fetches manifests, evaluates partition blooms
-            // 99% finish after bloom evaluation (~1s), 1% scan data files (~5s)
-            const workerMemoryGB = 0.256;
-            const fastWorkers = workerInvocations * 0.99;
-            const slowWorkers = workerInvocations * 0.01;
-            costs.workerLambdaInvoke = (workerInvocations / 1_000_000) * PRICING.lambda.invocationPerMillion;
-            costs.workerLambdaCompute = (fastWorkers * 1 * workerMemoryGB + slowWorkers * 5 * workerMemoryGB) * PRICING.lambda.gbSecond;
-            costs.searchLambda = costs.coordinatorLambda + costs.workerLambdaInvoke + costs.workerLambdaCompute;
-
-            // S3 GET requests for search
-            // Manifest GETs from S3 Standard are ~free ($0.0004/1K), so we ignore them
-            // Only data retrieval from cold storage matters
-            const retrievedGB = (slowWorkers * 100) / 1024; // 100MB per worker that scans (1% of workers)
-            costs.s3Retrieval = retrievedGB * storagePricing.retrievalPerGB;
-
-            // === Search Results Storage (S3 Standard, 30-day TTL) ===
-            // Results vary by query type:
-            // - Needle queries: ~1MB results (single record + context)
-            // - Broad queries: ~100MB results (many matching records)
-            // Weighted average: ~10MB per search
-            const avgResultSizeMB = 10;
-            const resultsGBPerDay = (searchesPerDay * avgResultSizeMB) / 1024;
-            // Results accumulate up to 30 days, then TTL expires (steady state)
-            const resultsRetentionDays = 30;
-            const resultsStorageGB = resultsGBPerDay * resultsRetentionDays;
-            costs.searchResultsStorage = resultsStorageGB * PRICING.s3Standard.storagePerGB;
-            // PUT requests for writing results
-            costs.searchResultsPut = (searchesPerMonth / 1000) * PRICING.s3Standard.putPer1k;
-
-            // === S3 Metadata API ===
-            // Collector reads/writes bloom.bin, stats.json, files.json per collection
-            // 3 GETs + 3 PUTs per collection
-            const metadataGets = collectorInvocationsPerMonth * 3;
-            const metadataPuts = collectorInvocationsPerMonth * 3;
-            costs.metadataApiGet = (metadataGets / 1000) * PRICING.s3Api.getPer1k;
-            costs.metadataApiPut = (metadataPuts / 1000) * PRICING.s3Api.putPer1k;
-            costs.metadataApi = costs.metadataApiGet + costs.metadataApiPut;
-
-            // === Other ===
-            costs.cloudwatch = 2; // ~20 alarms
-            costs.dataTransfer = 10 * 0.09; // 10GB out
-
-            // === Totals ===
-            costs.lambdaTotal = costs.ingestionLambda + costs.searchLambda;
-            costs.s3ColdTotal = costs.coldStorage + costs.s3Put + costs.s3Retrieval; // Varies by tier
-            costs.s3MetadataTotal = costs.metadataStorage; // Always S3 Standard
-            costs.s3HotTotal = costs.rawStorage + costs.searchResultsStorage + costs.searchResultsPut;
-            costs.s3Total = costs.s3ColdTotal + costs.s3MetadataTotal + costs.s3HotTotal;
-            costs.otherTotal = costs.cloudwatch + costs.dataTransfer;
-
-            costs.awsTotal = costs.firehose + costs.lambdaTotal + costs.s3Total + costs.metadataApi + costs.otherTotal;
-
-            // Glaciersearch fee
-            costs.gsFee = gbPerMonth * GS_FEE_PER_GB;
-
-            costs.grandTotal = costs.awsTotal + costs.gsFee;
-
-            // Calculate $/GB stored (based on raw/uncompressed cumulative storage)
-            costs.perGBStored = cumulativeRawGB > 0 ? costs.grandTotal / cumulativeRawGB : 0;
-
-            // Store intermediate values for breakdown
-            costs._meta = {
-                cumulativeCompressedTB,
-                cumulativeRawGB,
-                collectorInvocationsPerMonth,
-                heavyCollectionsPerDay,
-                lightCollectionsPerDay,
-                rawStorageGB,
-                searchesPerMonth,
-                workerInvocations,
-                avgWorkersPerSearch,
-                filesPerPartition,
-                filesPerMonth,
-                metadataGB,
-                partitionManifestsGB,
-                monthlyRollupGB,
-                daysPerWorker,
-                retrievedGB,
-                resultsStorageGB,
-                avgResultSizeMB,
-                storagePricing,
-                metadataGets,
-                metadataPuts
-            };
-
-            return costs;
-        }
-
-        function updateAll() {
-            const inputs = getInputs();
-            const months = 24;
-
-            // Calculate files per partition based on batch interval and Pareto distribution
-            const filesPerPartitionData = calculateFilesPerPartition(inputs);
-
-
-            // Calculate costs for each selected storage tier
-            const allResults = {};
-            for (const tier of inputs.storageTiers) {
-                allResults[tier] = {
-                    monthlyCosts: [],
-                    perGBCosts: [],
-                    totalCost: 0,
-                    breakdown: null,
-                    year7Breakdown: null
-                };
-
-                for (let month = 1; month <= months; month++) {
-                    const costs = calculateCosts(inputs, tier, month, filesPerPartitionData);
-                    allResults[tier].monthlyCosts.push(costs.grandTotal);
-                    allResults[tier].perGBCosts.push(costs.perGBStored);
-                    if (month === months) {
-                        allResults[tier].breakdown = costs;
-                    }
-                }
-                allResults[tier].totalCost = allResults[tier].monthlyCosts.reduce((a, b) => a + b, 0);
-
-                // Calculate Year 7 (month 84) costs for breakdown display
-                allResults[tier].year7Breakdown = calculateCosts(inputs, tier, 84, filesPerPartitionData);
-            }
-
-            updateChart(allResults);
-            updateBreakdown(inputs, allResults, filesPerPartitionData);
-        }
-
-        function updateChart(allResults) {
-            const tierColors = {
-                s3Standard: { border: '#ff6384', bg: '#ff638420', perGB: '#ff6384' },
-                s3IA: { border: '#f59e0b', bg: '#f59e0b20' },
-                glacierIR: { border: '#36a2eb', bg: '#36a2eb20' },
-                glacierDA: { border: '#4bc0c0', bg: '#4bc0c020' }
-            };
-            const tierNames = {
-                s3Standard: 'S3 Standard',
-                s3IA: 'S3 Standard-IA',
-                glacierIR: 'Glacier Instant Retrieval',
-                glacierDA: 'Glacier Deep Archive'
-            };
-
-            const labels = Array.from({ length: 24 }, (_, i) => `Month ${i + 1}`);
-
-            // Create datasets for both monthly cost and $/GB
-            const datasets = [];
-
-            Object.entries(allResults).forEach(([tier, data]) => {
-                // Monthly cost (left axis)
-                datasets.push({
-                    label: `${tierNames[tier]} - Monthly Cost`,
-                    data: data.monthlyCosts,
-                    borderColor: tierColors[tier].border,
-                    backgroundColor: tierColors[tier].bg,
-                    tension: 0.1,
-                    fill: false,
-                    yAxisID: 'y',
-                    borderWidth: 2
-                });
-
-                // $/GB stored (right axis) - for each tier with dashed line
-                datasets.push({
-                    label: `${tierNames[tier]} - $/GB`,
-                    data: data.perGBCosts,
-                    borderColor: tierColors[tier].border,
-                    backgroundColor: tierColors[tier].bg,
-                    tension: 0.1,
-                    fill: false,
-                    yAxisID: 'y1',
-                    borderWidth: 2,
-                    borderDash: [5, 5]
-                });
-            });
-
-            if (chart) {
-                chart.data.labels = labels;
-                chart.data.datasets = datasets;
-                chart.update();
-            } else {
+    </section>
+
+    <!-- Cost Comparison Section -->
+    <section id="cost" class="cost-section">
+        <div class="container">
+            <h2 class="section-title">The cost of keeping logs</h2>
+            <p style="text-align: center; color: var(--text-muted); margin-bottom: 2rem;">Monthly cost at 10TB/month ingestion, 1000 sources, 1000 searches/day</p>
+
+            <div class="cost-table-wrapper">
+                <table class="cost-table">
+                    <thead>
+                        <tr>
+                            <th>Solution</th>
+                            <th>Year 2</th>
+                            <th>Note</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Grafana Loki</td>
+                            <td class="cost">$6,500</td>
+                            <td class="note">$0.50/GB adds up fast</td>
+                        </tr>
+                        <tr>
+                            <td>ClickHouse Cloud</td>
+                            <td class="cost">$2,800</td>
+                            <td class="note">Cheap storage, expensive compute</td>
+                        </tr>
+                        <tr class="highlight-row">
+                            <td>Glaciersearch</td>
+                            <td class="cost">$1,000</td>
+                            <td class="note">Glacier pricing + instant search</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="chart-container">
+                <h3 style="text-align: center; margin-bottom: 1.5rem; color: var(--text-secondary);">Cost scales with your data</h3>
+                <canvas id="costChart" style="max-height: 300px;"></canvas>
+                <p class="chart-note">Monthly cost over 7 years (10TB/month ingestion)</p>
+            </div>
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script>
                 const ctx = document.getElementById('costChart').getContext('2d');
-                chart = new Chart(ctx, {
+                const months = Array.from({length: 84}, (_, i) => i + 1);
+
+                // Calculate monthly costs for each solution
+                const lokiCosts = months.map(m => {
+                    const storedTB = m * 10 / 10; // 10TB/mo, 10x compression = 1TB compressed/mo
+                    const ingestion = 10 * 1024 * 0.40; // $0.40/GB ingestion
+                    const retention = storedTB * 1024 * 0.10; // $0.10/GB/mo retention
+                    return ingestion + retention;
+                });
+
+                const clickhouseCosts = months.map(m => {
+                    const storedTB = m * 10 / 10; // compressed
+                    const storage = storedTB * 50; // $50/TB
+                    const ingestion = 410; // ClickPipes
+                    const compute = 1075; // compute + ingestion compute
+                    return storage + ingestion + compute;
+                });
+
+                const glaciersearchCosts = months.map(m => {
+                    const storedTB = m * 10 / 10; // compressed
+                    const storage = storedTB * 4.096; // Glacier IR
+                    const ingestion = 10 * 1024 * 0.029; // Firehose
+                    const compute = 150; // Lambda + metadata
+                    const gsFee = 10 * 1024 * 0.03; // Platform fee
+                    return storage + ingestion + compute + gsFee;
+                });
+
+                new Chart(ctx, {
                     type: 'line',
-                    data: { labels, datasets },
+                    data: {
+                        labels: months.map(m => m % 12 === 0 ? `Y${m/12}` : ''),
+                        datasets: [
+                            {
+                                label: 'Grafana Loki',
+                                data: lokiCosts,
+                                borderColor: '#f7768e',
+                                backgroundColor: '#f7768e20',
+                                tension: 0.1,
+                                fill: false,
+                                pointRadius: 0
+                            },
+                            {
+                                label: 'ClickHouse Cloud',
+                                data: clickhouseCosts,
+                                borderColor: '#e0af68',
+                                backgroundColor: '#e0af6820',
+                                tension: 0.1,
+                                fill: false,
+                                pointRadius: 0
+                            },
+                            {
+                                label: 'Glaciersearch',
+                                data: glaciersearchCosts,
+                                borderColor: '#7aa2f7',
+                                backgroundColor: '#7aa2f720',
+                                tension: 0.1,
+                                fill: false,
+                                borderWidth: 3,
+                                pointRadius: 0
+                            }
+                        ]
+                    },
                     options: {
                         responsive: true,
-                        maintainAspectRatio: false,
-                        interaction: {
-                            mode: 'index',
-                            intersect: false
-                        },
+                        maintainAspectRatio: true,
                         plugins: {
-                            title: {
-                                display: false
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        if (context.dataset.yAxisID === 'y1') {
-                                            return `${context.dataset.label}: $${context.parsed.y.toFixed(4)}/GB`;
-                                        }
-                                        return `${context.dataset.label}: $${context.parsed.y.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
-                                    }
-                                }
-                            },
                             legend: {
-                                labels: {
-                                    usePointStyle: true,
-                                    padding: 20
-                                }
+                                labels: { color: '#a9b1d6' }
                             }
                         },
                         scales: {
-                            y: {
-                                type: 'linear',
-                                display: true,
-                                position: 'left',
-                                beginAtZero: true,
-                                title: {
-                                    display: true,
-                                    text: 'Monthly Cost ($)',
-                                    color: '#36a2eb'
-                                },
-                                ticks: {
-                                    callback: function(value) {
-                                        return '$' + value.toLocaleString();
-                                    },
-                                    color: '#36a2eb'
-                                },
-                                grid: {
-                                    drawOnChartArea: true
-                                }
-                            },
-                            y1: {
-                                type: 'linear',
-                                display: true,
-                                position: 'right',
-                                beginAtZero: true,
-                                title: {
-                                    display: true,
-                                    text: '$/GB Stored (decreasing)',
-                                    color: '#10b981'
-                                },
-                                ticks: {
-                                    callback: function(value) {
-                                        return '$' + value.toFixed(3);
-                                    },
-                                    color: '#10b981'
-                                },
-                                grid: {
-                                    drawOnChartArea: false
-                                }
-                            },
                             x: {
-                                title: {
-                                    display: true,
-                                    text: 'Month'
+                                grid: { color: '#3b426140' },
+                                ticks: { color: '#565f89' }
+                            },
+                            y: {
+                                grid: { color: '#3b426140' },
+                                ticks: {
+                                    color: '#565f89',
+                                    callback: function(value) {
+                                        return '$' + (value/1000).toFixed(0) + 'k';
+                                    }
                                 }
                             }
                         }
                     }
                 });
-            }
-        }
+            </script>
+        </div>
+    </section>
 
-        function updateBreakdown(inputs, allResults, filesPerPartitionData) {
-            const tiers = inputs.storageTiers;
-            const firstTier = tiers[0];
-            const costs = allResults[firstTier].breakdown;
-            const meta = costs._meta;
-            const multiTier = tiers.length > 1;
+    <!-- Best of Both Worlds -->
+    <section class="hybrid-section">
+        <div class="container">
+            <h2 class="section-title">Keep your stack, cut your bill</h2>
+            <div class="hybrid-diagram">
+                <div class="hybrid-flow">
+                    <div class="hybrid-source">
+                        <span class="label">Your logs</span>
+                        <span class="hybrid-arrow">→</span>
+                        <div class="hybrid-split">
+                            <div class="hybrid-path hot">
+                                <span class="destination">Datadog / Loki / etc</span>
+                                <span class="details">Alerts, dashboards, 30 days</span>
+                                <span class="cost">$$$$</span>
+                            </div>
+                            <div class="hybrid-path cold">
+                                <span class="destination">Glaciersearch</span>
+                                <span class="details">Investigations, compliance, years</span>
+                                <span class="cost">$</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <p class="hybrid-tagline"><strong>Hot for 30 days, searchable forever.</strong> Alerts in Datadog, investigations in Glaciersearch.</p>
+            </div>
+        </div>
+    </section>
 
-            const tierNames = {
-                s3Standard: 'S3 Standard',
-                s3IA: 'S3 Std-IA',
-                glacierIR: 'Glacier IR',
-                glacierDA: 'Glacier DA'
-            };
+    <!-- How It Works -->
+    <section id="how" class="how-section">
+        <div class="container">
+            <h2 class="section-title">How it works</h2>
+            <div class="steps">
+                <div class="step">
+                    <span class="step-number">1</span>
+                    <h3>Stream & Buffer</h3>
+                    <p>Logs stream through Firehose to S3. Collector batches by source until size or time threshold.</p>
+                </div>
+                <div class="step">
+                    <span class="step-number">2</span>
+                    <h3>Compress & Index</h3>
+                    <p>Schema-aware columnar encoding with bloom filters. Data goes to Glacier IR in your account.</p>
+                </div>
+                <div class="step">
+                    <span class="step-number">3</span>
+                    <h3>Search & Retrieve</h3>
+                    <p>Hierarchical blooms prune 95-99% of partitions. Fetch only what matches, in seconds.</p>
+                </div>
+            </div>
+        </div>
+    </section>
 
-            const tierColors = {
-                s3Standard: '#ff6384',
-                s3IA: '#f59e0b',
-                glacierIR: '#36a2eb',
-                glacierDA: '#4bc0c0'
-            };
+    <!-- Use Cases -->
+    <section class="usecases-section">
+        <div class="container">
+            <h2 class="section-title">Built for</h2>
+            <div class="usecases">
+                <div class="usecase">
+                    <h3>Cost Optimization</h3>
+                    <p>You're spending $10k+/month on logs. Choose a price that scales with your data, not your vendor's margins.</p>
+                </div>
+                <div class="usecase">
+                    <h3>Compliance & Audit</h3>
+                    <p>HIPAA, SOC 2, PCI-DSS require years of retention. Prove compliance without hot-storage prices.</p>
+                </div>
+                <div class="usecase">
+                    <h3>Incident Investigation</h3>
+                    <p>When a breach happened 18 months ago, search those logs in seconds—not 48 hours.</p>
+                </div>
+            </div>
+        </div>
+    </section>
 
-            const container = document.getElementById('breakdownTable');
+    <!-- Technical Details -->
+    <section class="tech-section">
+        <div class="container">
+            <h2 class="section-title">Technical details</h2>
+            <div class="tech-grid">
+                <div class="tech-stat">
+                    <div class="value">Your AWS</div>
+                    <div class="label">Data stays in your account</div>
+                </div>
+                <div class="tech-stat">
+                    <div class="value">Serverless</div>
+                    <div class="label">Lambda + S3 only</div>
+                </div>
+                <div class="tech-stat">
+                    <div class="value">10×</div>
+                    <div class="label">Compression ratio</div>
+                </div>
+                <div class="tech-stat">
+                    <div class="value">Seconds</div>
+                    <div class="label">Query latency</div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-            // Build header row - add columns for each tier if multiple selected
-            let headerRow = `<th>Component</th>`;
-            if (multiTier) {
-                tiers.forEach(t => {
-                    headerRow += `<th style="text-align: right; color: ${tierColors[t]}">${tierNames[t]}</th>`;
-                });
-            } else {
-                headerRow += `<th>Calculation</th><th style="text-align: right">Cost</th>`;
-            }
+    <!-- FAQ Section -->
+    <section id="faq" class="faq-section">
+        <div class="container">
+            <h2 class="section-title">Frequently asked questions</h2>
+            <div class="faq-grid">
+                <div class="faq-item">
+                    <h3>How long do searches take?</h3>
+                    <p>Most searches return in 2-10 seconds. Bloom filters let us skip 95-99% of partitions, so we only fetch data that's likely to match. No restore delays—Glacier Instant Retrieval has millisecond first-byte latency.</p>
+                </div>
+                <div class="faq-item">
+                    <h3>What if I need real-time alerting?</h3>
+                    <p>Keep your existing stack for that. Glaciersearch is for long-term retention and investigations—not real-time monitoring. Send logs to both: Datadog for alerts, Glaciersearch for the archive.</p>
+                </div>
+                <div class="faq-item">
+                    <h3>How does data stay in my account?</h3>
+                    <p>We deploy Lambda functions and S3 buckets in your AWS account via CloudFormation. Your logs never leave your VPC.</p>
+                </div>
+                <div class="faq-item">
+                    <h3>What about compliance certifications?</h3>
+                    <p>Everything runs in your AWS account, so you inherit your existing compliance posture—HIPAA, SOC 2, PCI-DSS, FedRAMP, whatever you've already configured.</p>
+                </div>
+                <div class="faq-item">
+                    <h3>Isn't Glacier slow?</h3>
+                    <p>You're thinking of Glacier Deep Archive (12-hour restores). We use S3 Glacier Instant Retrieval for millisecond access. Our efficient search index keeps retrieval fees low.</p>
+                </div>
+                <div class="faq-item">
+                    <h3>What log formats do you support?</h3>
+                    <p>JSON, newline-delimited JSON, and common structured formats. We auto-detect schemas and optimize compression per field type. Custom formats can be supported—reach out.</p>
+                </div>
+            </div>
+        </div>
+    </section>
 
-            // Helper to generate multi-tier cost cells
-            const tierCells = (costKey) => {
-                if (multiTier) {
-                    return tiers.map(t =>
-                        `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].breakdown[costKey].toFixed(2)}</td>`
-                    ).join('');
+    <!-- Final CTA -->
+    <section id="cta" class="final-cta">
+        <div class="container">
+            <h2>Stop paying hot-storage prices for cold data.</h2>
+            <p class="body">We're working with a small group of design partners. If you're spending $10k+/month on log retention, let's talk.</p>
+            <form class="cta-form" id="footer-form" action="https://formspree.io/f/xpqryage" method="POST">
+                <input type="email" name="email" placeholder="you@company.com" required>
+                <button type="submit">Get Early Access</button>
+            </form>
+            <p class="microcopy">Currently in private beta. We'll reach out soon.</p>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>Glaciersearch</p>
+        </div>
+    </footer>
+
+    <script>
+        // Formspree AJAX submission
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const button = this.querySelector('button');
+                const originalText = button.textContent;
+
+                // Show loading state
+                button.textContent = 'Sending...';
+                button.disabled = true;
+
+                try {
+                    const response = await fetch(this.action, {
+                        method: 'POST',
+                        body: new FormData(this),
+                        headers: { 'Accept': 'application/json' }
+                    });
+
+                    if (response.ok) {
+                        button.textContent = 'Thanks!';
+                        this.reset();
+                        setTimeout(() => {
+                            button.textContent = originalText;
+                            button.disabled = false;
+                        }, 3000);
+                    } else {
+                        throw new Error('Form submission failed');
+                    }
+                } catch (error) {
+                    button.textContent = 'Error - try again';
+                    button.disabled = false;
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                    }, 3000);
                 }
-                return '';
-            };
-
-            // Build table body
-            let tbody = '';
-
-            // === Fixed costs (same across all tiers) ===
-            tbody += `
-                <tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">Kinesis Firehose (same for all tiers)</td></tr>
-                <tr>
-                    <td>Data ingestion</td>
-                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.firehose.toFixed(2)}</td>`).join('') :
-                      `<td class="calculation">${inputs.tbPerMonth} TB × $0.029/GB</td><td style="text-align: right">$${costs.firehose.toFixed(2)}</td>`}
-                </tr>
-
-                <tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">Lambda (same for all tiers)</td></tr>
-                <tr>
-                    <td>Collector Lambda</td>
-                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.collectorLambda.toFixed(2)}</td>`).join('') :
-                      `<td class="calculation">${(meta.collectorInvocationsPerMonth / 1000).toFixed(1)}K invocations × 30s</td><td style="text-align: right">$${costs.collectorLambda.toFixed(2)}</td>`}
-                </tr>
-                <tr>
-                    <td>Scheduler Lambda + S3 List</td>
-                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${(costs.schedulerLambda + costs.schedulerS3List).toFixed(2)}</td>`).join('') :
-                      `<td class="calculation">Every 15min, ListObjects per source</td><td style="text-align: right">$${(costs.schedulerLambda + costs.schedulerS3List).toFixed(2)}</td>`}
-                </tr>
-                <tr>
-                    <td>Search Lambda</td>
-                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.searchLambda.toFixed(2)}</td>`).join('') :
-                      `<td class="calculation">${(meta.workerInvocations / 1000).toFixed(0)}K workers (${meta.avgWorkersPerSearch}/search, ${meta.daysPerWorker} days each)</td><td style="text-align: right">$${costs.searchLambda.toFixed(2)}</td>`}
-                </tr>
-
-                <tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">S3 Metadata API (same for all tiers)</td></tr>
-                <tr>
-                    <td>Open partition reads/writes</td>
-                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.metadataApi.toFixed(2)}</td>`).join('') :
-                      `<td class="calculation">${(meta.collectorInvocationsPerMonth * 3 / 1000).toFixed(0)}K GETs + ${(meta.collectorInvocationsPerMonth * 3 / 1000).toFixed(0)}K PUTs</td><td style="text-align: right">$${costs.metadataApi.toFixed(2)}</td>`}
-                </tr>
-
-                <tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">Other (same for all tiers)</td></tr>
-                <tr>
-                    <td>CloudWatch + Transfer</td>
-                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.otherTotal.toFixed(2)}</td>`).join('') :
-                      `<td class="calculation">~20 alarms + 10GB egress</td><td style="text-align: right">$${costs.otherTotal.toFixed(2)}</td>`}
-                </tr>
-            `;
-
-            // === Cold Storage (varies by tier) ===
-            tbody += `<tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">S3 Cold Storage (varies by tier)</td></tr>`;
-
-            if (multiTier) {
-                tbody += `
-                    <tr>
-                        <td>Log archive (${meta.cumulativeCompressedTB.toFixed(0)} TB)</td>
-                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].breakdown.coldStorage.toFixed(2)}</td>`).join('')}
-                    </tr>
-                    <tr>
-                        <td>Data retrieval (1% of searches)</td>
-                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].breakdown.s3Retrieval.toFixed(2)}</td>`).join('')}
-                    </tr>
-                    <tr>
-                        <td>PUT requests</td>
-                        ${tiers.map(t => `<td style="text-align: right">$${allResults[t].breakdown.s3Put.toFixed(2)}</td>`).join('')}
-                    </tr>
-                `;
-            } else {
-                tbody += `
-                    <tr>
-                        <td>Log archive</td>
-                        <td class="calculation">${meta.cumulativeCompressedTB.toFixed(0)} TB × $${(PRICING[firstTier].storagePerGB * 1024).toFixed(2)}/TB</td>
-                        <td style="text-align: right">$${costs.coldStorage.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                        <td>Data retrieval (1% of searches)</td>
-                        <td class="calculation">${meta.retrievedGB.toFixed(1)} GB × $${meta.storagePricing.retrievalPerGB}/GB</td>
-                        <td style="text-align: right">$${costs.s3Retrieval.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                        <td>PUT requests</td>
-                        <td class="calculation">${meta.filesPerMonth.toFixed(0)} files/mo</td>
-                        <td style="text-align: right">$${costs.s3Put.toFixed(2)}</td>
-                    </tr>
-                `;
-            }
-
-            // === Metadata (always S3 Standard) ===
-            tbody += `<tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">S3 Metadata (always S3 Standard)</td></tr>`;
-
-            if (multiTier) {
-                tbody += `
-                    <tr>
-                        <td>Manifests + rollup blooms (${meta.metadataGB.toFixed(1)} GB)</td>
-                        ${tiers.map(() => `<td style="text-align: right">$${costs.metadataStorage.toFixed(2)}</td>`).join('')}
-                    </tr>
-                `;
-            } else {
-                tbody += `
-                    <tr>
-                        <td>Manifests + rollup blooms</td>
-                        <td class="calculation">${meta.metadataGB.toFixed(1)} GB × $0.023/GB</td>
-                        <td style="text-align: right">$${costs.metadataStorage.toFixed(2)}</td>
-                    </tr>
-                `;
-            }
-
-            // Hot storage (same for all - uses S3 Standard)
-            tbody += `
-                <tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">S3 Hot Storage (Temp + Results)</td></tr>
-                <tr>
-                    <td>Raw landing zone (Firehose → Collector)</td>
-                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.rawStorage.toFixed(2)}</td>`).join('') :
-                      `<td class="calculation">${meta.rawStorageGB.toFixed(1)} GB × $0.023/GB</td><td style="text-align: right">$${costs.rawStorage.toFixed(2)}</td>`}
-                </tr>
-                <tr>
-                    <td>Search results (30-day TTL)</td>
-                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.searchResultsStorage.toFixed(2)}</td>`).join('') :
-                      `<td class="calculation">${meta.resultsStorageGB.toFixed(1)} GB × $0.023/GB</td><td style="text-align: right">$${costs.searchResultsStorage.toFixed(2)}</td>`}
-                </tr>
-            `;
-
-            // S3 Total
-            if (multiTier) {
-                tbody += `
-                    <tr class="subtotal">
-                        <td><strong>S3 Total</strong></td>
-                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}"><strong>$${allResults[t].breakdown.s3Total.toFixed(2)}</strong></td>`).join('')}
-                    </tr>
-                `;
-            } else {
-                tbody += `<tr class="subtotal"><td colspan="2"><strong>S3 Total</strong></td><td style="text-align: right"><strong>$${costs.s3Total.toFixed(2)}</strong></td></tr>`;
-            }
-
-            // AWS Total
-            if (multiTier) {
-                tbody += `
-                    <tr class="subtotal">
-                        <td><strong>AWS Total</strong></td>
-                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}"><strong>$${allResults[t].breakdown.awsTotal.toFixed(2)}</strong></td>`).join('')}
-                    </tr>
-                `;
-            } else {
-                tbody += `<tr class="subtotal"><td colspan="2"><strong>AWS Total</strong></td><td style="text-align: right"><strong>$${costs.awsTotal.toFixed(2)}</strong></td></tr>`;
-            }
-
-            // GS Fee (same for all)
-            tbody += `
-                <tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">Glaciersearch</td></tr>
-                <tr>
-                    <td>Platform fee (${inputs.tbPerMonth} TB × $0.03/GB)</td>
-                    ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.gsFee.toFixed(2)}</td>`).join('') :
-                      `<td class="calculation">${inputs.tbPerMonth} TB × 1024 GB × $0.03/GB</td><td style="text-align: right">$${costs.gsFee.toFixed(2)}</td>`}
-                </tr>
-            `;
-
-            // Grand Total
-            if (multiTier) {
-                tbody += `
-                    <tr class="grand-total">
-                        <td>Grand Total (Month 24)</td>
-                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].breakdown.grandTotal.toFixed(2)}</td>`).join('')}
-                    </tr>
-                `;
-            } else {
-                tbody += `<tr class="grand-total"><td colspan="2">Grand Total (Month 24)</td><td style="text-align: right">$${costs.grandTotal.toFixed(2)}</td></tr>`;
-            }
-
-            // Year 7 (Month 84) projection
-            if (multiTier) {
-                tbody += `
-                    <tr class="grand-total" style="background: #fef3c7;">
-                        <td>Grand Total (Year 7 / Month 84)</td>
-                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].year7Breakdown.grandTotal.toFixed(2)}</td>`).join('')}
-                    </tr>
-                `;
-            } else {
-                const year7Costs = allResults[firstTier].year7Breakdown;
-                tbody += `<tr class="grand-total" style="background: #fef3c7;"><td colspan="2">Grand Total (Year 7 / Month 84)</td><td style="text-align: right">$${year7Costs.grandTotal.toFixed(2)}</td></tr>`;
-            }
-
-            // Efficiency metrics
-            tbody += `<tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">Efficiency Metrics</td></tr>`;
-            if (multiTier) {
-                tbody += `
-                    <tr>
-                        <td>$/GB stored (raw)</td>
-                        ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}; font-weight: 600">$${allResults[t].breakdown.perGBStored.toFixed(4)}/GB</td>`).join('')}
-                    </tr>
-                `;
-            } else {
-                tbody += `
-                    <tr>
-                        <td>$/GB stored (raw)</td>
-                        <td class="calculation">$${costs.grandTotal.toFixed(2)} ÷ ${(meta.cumulativeRawGB / 1024).toFixed(0)} TB</td>
-                        <td style="text-align: right; color: #06b6d4; font-weight: 600">$${costs.perGBStored.toFixed(4)}/GB</td>
-                    </tr>
-                `;
-            }
-
-            container.innerHTML = `
-                <thead>
-                    <tr>${headerRow}</tr>
-                </thead>
-                <tbody>${tbody}</tbody>
-            `;
-        }
-
-        // Event listeners
-        document.querySelectorAll('input, select').forEach(el => {
-            el.addEventListener('input', updateAll);
-            el.addEventListener('change', updateAll);
+            });
         });
-
-        // Initialize
-        updateAll();
     </script>
 </body>
 </html>
