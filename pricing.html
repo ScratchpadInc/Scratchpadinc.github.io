@@ -216,6 +216,11 @@
                 <input type="number" id="partitionsPerSearch" value="30000" min="1" max="100000" step="1000">
                 <span class="hint">days × sources limit (e.g., 30 days × 1000 sources)</span>
             </div>
+            <div class="control-group">
+                <label for="partitionMatchRate">Partition Match Rate (%)</label>
+                <input type="number" id="partitionMatchRate" value="1" min="0.1" max="50" step="0.5">
+                <span class="hint">% of partitions with matching data (1% = needle, 30% = broad filter)</span>
+            </div>
         </div>
     </div>
 
@@ -275,7 +280,8 @@
                 <li><strong>Metadata:</strong> ~1% of compressed storage in S3 Standard (partition manifests with bloom filters, zone maps, file lists + rollup blooms).</li>
                 <li><strong>Pure S3 metadata:</strong> Open partitions stored as S3 objects (bloom.bin, stats.json, files.json). ~$2/mo for API calls.</li>
                 <li><strong>Max partitions per search:</strong> days × sources limit. E.g., 30,000 = 30 days × 1000 sources (worst case cross-source query).</li>
-                <li><strong>Bloom filter FPR:</strong> 1% false positive rate. 99% of workers finish after manifest evaluation; 1% scan data files.</li>
+                <li><strong>Partition match rate:</strong> Configurable % of partitions that contain matching data. Needle queries (~0.1%) vs broad filters like "priority:ERROR" (~30%). Affects both Lambda compute and retrieval costs.</li>
+                <li><strong>Bloom filter FPR:</strong> 1% false positive rate. Combined with match rate determines actual data retrieval.</li>
             </ul>
         </div>
     </div>
@@ -363,7 +369,8 @@
                 searchesPerDay: parseInt(document.getElementById('searchesPerDay').value) || 100,
                 compressionRatio: parseFloat(document.getElementById('compressionRatio').value) || 10,
                 // Search scope
-                partitionsPerSearch: parseInt(document.getElementById('partitionsPerSearch').value) || 100,
+                partitionsPerSearch: parseInt(document.getElementById('partitionsPerSearch').value) || 30000,
+                partitionMatchRate: parseFloat(document.getElementById('partitionMatchRate').value) || 1,
                 storageTiers: getSelectedStorageTiers()
             };
         }
@@ -420,7 +427,7 @@
 
         function calculateCosts(inputs, storageTier, month, filesPerPartitionData) {
             const { tbPerMonth, numSources, collectorThresholdMB, batchInterval, searchesPerDay, compressionRatio,
-                    partitionsPerSearch } = inputs;
+                    partitionsPerSearch, partitionMatchRate } = inputs;
             const filesPerPartition = filesPerPartitionData.avgFilesPerPartition;
 
             const gbPerMonth = tbPerMonth * 1024;
@@ -543,10 +550,12 @@
                                        searchesPerMonth * coordinatorRuntimeSec * coordinatorMemoryGB * PRICING.lambda.gbSecond;
 
             // Worker Lambda: fetches manifests, evaluates partition blooms
-            // 99% finish after bloom evaluation (~1s), 1% scan data files (~5s)
+            // Fast workers finish after bloom evaluation (~1s), slow workers scan data files (~5s)
+            // Match rate determines what % of workers need to scan actual data
             const workerMemoryGB = 0.256;
-            const fastWorkers = workerInvocations * 0.99;
-            const slowWorkers = workerInvocations * 0.01;
+            const matchRateDecimal = partitionMatchRate / 100;
+            const fastWorkers = workerInvocations * (1 - matchRateDecimal);
+            const slowWorkers = workerInvocations * matchRateDecimal;
             costs.workerLambdaInvoke = (workerInvocations / 1_000_000) * PRICING.lambda.invocationPerMillion;
             costs.workerLambdaCompute = (fastWorkers * 1 * workerMemoryGB + slowWorkers * 5 * workerMemoryGB) * PRICING.lambda.gbSecond;
             costs.searchLambda = costs.coordinatorLambda + costs.workerLambdaInvoke + costs.workerLambdaCompute;
@@ -624,7 +633,10 @@
                 avgResultSizeMB,
                 storagePricing,
                 metadataGets,
-                metadataPuts
+                metadataPuts,
+                matchRateDecimal,
+                slowWorkers,
+                fastWorkers
             };
 
             return costs;
@@ -872,7 +884,7 @@
                 <tr>
                     <td>Search Lambda</td>
                     ${multiTier ? tiers.map(() => `<td style="text-align: right">$${costs.searchLambda.toFixed(2)}</td>`).join('') :
-                      `<td class="calculation">${(meta.workerInvocations / 1000).toFixed(0)}K workers (${meta.avgWorkersPerSearch}/search, ${meta.daysPerWorker} days each)</td><td style="text-align: right">$${costs.searchLambda.toFixed(2)}</td>`}
+                      `<td class="calculation">${(meta.workerInvocations / 1000).toFixed(0)}K workers (${(meta.matchRateDecimal * 100).toFixed(1)}% scan data)</td><td style="text-align: right">$${costs.searchLambda.toFixed(2)}</td>`}
                 </tr>
 
                 <tr class="section-header"><td colspan="${multiTier ? tiers.length + 1 : 3}">S3 Metadata API (same for all tiers)</td></tr>
@@ -900,7 +912,7 @@
                         ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].breakdown.coldStorage.toFixed(2)}</td>`).join('')}
                     </tr>
                     <tr>
-                        <td>Data retrieval (1% of searches)</td>
+                        <td>Data retrieval (${(meta.matchRateDecimal * 100).toFixed(1)}% match rate)</td>
                         ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].breakdown.s3Retrieval.toFixed(2)}</td>`).join('')}
                     </tr>
                     <tr>
@@ -916,7 +928,7 @@
                         <td style="text-align: right">$${costs.coldStorage.toFixed(2)}</td>
                     </tr>
                     <tr>
-                        <td>Data retrieval (1% of searches)</td>
+                        <td>Data retrieval (${(meta.matchRateDecimal * 100).toFixed(1)}% match rate)</td>
                         <td class="calculation">${meta.retrievedGB.toFixed(1)} GB × $${meta.storagePricing.retrievalPerGB}/GB</td>
                         <td style="text-align: right">$${costs.s3Retrieval.toFixed(2)}</td>
                     </tr>
