@@ -221,6 +221,11 @@
                 <input type="number" id="partitionMatchRate" value="1" min="0.1" max="50" step="0.5">
                 <span class="hint">% of partitions with matching data (1% = needle, 30% = broad filter)</span>
             </div>
+            <div class="control-group">
+                <label for="maxGBPerSearch">Max GB / Search</label>
+                <input type="number" id="maxGBPerSearch" value="0" min="0" step="1">
+                <span class="hint">Cap on Parquet data fetched per search (0 = unlimited)</span>
+            </div>
         </div>
     </div>
 
@@ -282,6 +287,7 @@
                 <li><strong>Max partitions per search:</strong> days × sources limit. E.g., 30,000 = 30 days × 1000 sources (worst case cross-source query).</li>
                 <li><strong>Partition match rate:</strong> Configurable % of partitions that contain matching data. Needle queries (~0.1%) vs broad filters like "priority:ERROR" (~30%). Affects both Lambda compute and retrieval costs.</li>
                 <li><strong>Bloom filter FPR:</strong> 1% false positive rate. Combined with match rate determines actual data retrieval.</li>
+                <li><strong>Max GB / Search:</strong> Caps Parquet data fetched per search (mirrors --max-gb flag). Keeps most recent files within budget. 0 = unlimited.</li>
             </ul>
         </div>
     </div>
@@ -371,6 +377,7 @@
                 // Search scope
                 partitionsPerSearch: parseInt(document.getElementById('partitionsPerSearch').value) || 30000,
                 partitionMatchRate: parseFloat(document.getElementById('partitionMatchRate').value) || 1,
+                maxGBPerSearch: parseFloat(document.getElementById('maxGBPerSearch').value) || 0,
                 storageTiers: getSelectedStorageTiers()
             };
         }
@@ -427,7 +434,7 @@
 
         function calculateCosts(inputs, storageTier, month, filesPerPartitionData) {
             const { tbPerMonth, numSources, collectorThresholdMB, batchInterval, searchesPerDay, compressionRatio,
-                    partitionsPerSearch, partitionMatchRate } = inputs;
+                    partitionsPerSearch, partitionMatchRate, maxGBPerSearch } = inputs;
             const filesPerPartition = filesPerPartitionData.avgFilesPerPartition;
 
             const gbPerMonth = tbPerMonth * 1024;
@@ -563,7 +570,10 @@
             // S3 GET requests for search
             // Manifest GETs from S3 Standard are ~free ($0.0004/1K), so we ignore them
             // Only data retrieval from cold storage matters
-            const retrievedGB = (slowWorkers * 100) / 1024; // 100MB per worker that scans (1% of workers)
+            const uncappedRetrievedGB = (slowWorkers * 100) / 1024; // 100MB per worker that scans
+            const retrievedGB = maxGBPerSearch > 0
+                ? Math.min(uncappedRetrievedGB, maxGBPerSearch * searchesPerMonth)
+                : uncappedRetrievedGB;
             costs.s3Retrieval = retrievedGB * storagePricing.retrievalPerGB;
 
             // === Search Results Storage (S3 Standard, 30-day TTL) ===
@@ -636,7 +646,8 @@
                 metadataPuts,
                 matchRateDecimal,
                 slowWorkers,
-                fastWorkers
+                fastWorkers,
+                retrievalCapped: maxGBPerSearch > 0 && uncappedRetrievedGB > maxGBPerSearch * searchesPerMonth
             };
 
             return costs;
@@ -912,7 +923,7 @@
                         ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].breakdown.coldStorage.toFixed(2)}</td>`).join('')}
                     </tr>
                     <tr>
-                        <td>Data retrieval (${(meta.matchRateDecimal * 100).toFixed(1)}% match rate)</td>
+                        <td>Data retrieval (${(meta.matchRateDecimal * 100).toFixed(1)}% match rate)${meta.retrievalCapped ? ' ⚠ capped' : ''}</td>
                         ${tiers.map(t => `<td style="text-align: right; color: ${tierColors[t]}">$${allResults[t].breakdown.s3Retrieval.toFixed(2)}</td>`).join('')}
                     </tr>
                     <tr>
@@ -928,7 +939,7 @@
                         <td style="text-align: right">$${costs.coldStorage.toFixed(2)}</td>
                     </tr>
                     <tr>
-                        <td>Data retrieval (${(meta.matchRateDecimal * 100).toFixed(1)}% match rate)</td>
+                        <td>Data retrieval (${(meta.matchRateDecimal * 100).toFixed(1)}% match rate)${meta.retrievalCapped ? ' ⚠ capped' : ''}</td>
                         <td class="calculation">${meta.retrievedGB.toFixed(1)} GB × $${meta.storagePricing.retrievalPerGB}/GB</td>
                         <td style="text-align: right">$${costs.s3Retrieval.toFixed(2)}</td>
                     </tr>
